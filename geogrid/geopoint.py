@@ -3,7 +3,6 @@ geopoint.py
 
 Provicdes GeoPoint class
 """
-
 from osgeo import osr
 
 
@@ -16,20 +15,24 @@ class GeoPoint(object):
         self._x = x  # Floating point value of k
         self._y = y
 
+
     @property
     def x(self):
         """Return the x coordinate"""
         return self._x
+
 
     @property
     def y(self):
         """Return the y coordinate"""
         return self._y
 
+
     @property
     def value(self):
         """Return the value at the GeoPoint"""
         return self._value
+
 
     @property
     def srs(self):
@@ -43,6 +46,7 @@ class GeoPoint(object):
                self._value is not None and \
                self._x is not None and \
                self._y is not None
+
 
 def transform_point(src_gp, dst_srs):
     """Transform one gp into another gp with specified SRS"""

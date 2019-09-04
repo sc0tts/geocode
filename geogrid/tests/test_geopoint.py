@@ -4,10 +4,10 @@ test_initial.py
 Initial tests to ensure project layout is adequate
 """
 
-#import numpy as np
+import geogrid
 from osgeo import osr
 #from osgeo import gdal
-import geogrid
+#import numpy as np
 from numpy.testing import assert_almost_equal
 
 
@@ -17,6 +17,7 @@ polar_stereo_north_srs.ImportFromEPSG(3411)
 
 latlon_srs = osr.SpatialReference()
 latlon_srs.ImportFromEPSG(4326)
+
 
 def create_geopoint_on_psn(
         srs=polar_stereo_north_srs,
