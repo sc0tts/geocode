@@ -1,1 +1,1 @@
-import geogrid.geopoint
+from geogrid.geopoint import GeoPoint

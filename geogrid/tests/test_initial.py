@@ -16,25 +16,35 @@ def test_imports():
 
 def test_geopoint_exists():
     """Test can declare an empty GeoPoint class"""
-    gp_empty = geogrid.geopoint.GeoPoint()
+    gp_empty = geogrid.GeoPoint()
 
 
-def test_geopoint_can_be_declared():
+def test_can_declare_geopoint():
     """Test can declare a proper GeoPoint class"""
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(3411)
     xval=-3800000
     yval=5800000
     init_value=100
-    gp = geogrid.geopoint.GeoPoint(
+    gp = geogrid.GeoPoint(
         srs=srs,
         x=-3800000,
         y=5800000,
-        value=100)
+        value=100
+    )
     assert gp.x == xval
     assert gp.y == yval
     assert gp.value == init_value
     assert gp.srs == srs
-    print(gp.srs)
 
 
+def test_geopoint_isValid():
+    gp_empty = geogrid.GeoPoint()
+    assert gp_empty.isValid() == False
+
+    gp_minimal = geogrid.GeoPoint(
+        srs=osr.SpatialReference(),
+        x=0,
+        y=0,
+        value=0)
+    assert gp_minimal.isValid()
