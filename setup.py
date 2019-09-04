@@ -10,8 +10,12 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 setup(
     name='geogrid',
     version='0.1.0',
+    author='J Scott Stewart',
+    author_email='james.stewart@colorado.edu',
     description='classes for provideing GeoGrid and GeoPoint',
+    long_description=long_description,
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
+    install_requires=('scipy', 'gdal', 'pytest'),
     python_requires='>=3.6',
 )
 
