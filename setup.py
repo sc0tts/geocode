@@ -11,7 +11,7 @@ setup(
     name='geogrid',
     version='0.1.0',
     description='classes for provideing GeoGrid and GeoPoint',
-    packages=find_packages(exclude='contrib', 'docs', 'tests']),
+    packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     python_requires='>=3.6',
 )
 
