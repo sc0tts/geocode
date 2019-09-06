@@ -4,40 +4,37 @@ geogrid.py
 Provicdes GeoGrid class
 """
 from osgeo import osr
-import netCDF4
 
 
 class GeoGrid(object):
     """geocode's located-array class"""
+    pass
 
-    def __init__(self, srs_string=None,
-                 array=None, x=None, y=None):
+    def __init__(self, array=None, x=None, y=None, proj_definition=None):
         """GeoGrid is an array with projection"""
         self._srs = osr.SpatialReference()
 
-        #if fname is not None:
-
-        if srs_string is not None:
+        if proj_definition is not None:
             try:
                 if self._srs.ExportToWkt() == "" and \
-                   isinstance(srs_string, int):
-                    self._srs.ImportFromEPSG(srs_string)
+                   isinstance(proj_definition, int):
+                    self._srs.ImportFromEPSG(proj_definition)
             except TypeError:
                 print('Ignoring TypeError when importing from epsg')
 
             try:
                 if self._srs.ExportToWkt() == "" and \
-                   isinstance(srs_string, str) and \
-                   'PROJ' in srs_string:
-                    self._srs.ImportFromWkt(srs_string)
+                   isinstance(proj_definition, str) and \
+                   'PROJ' in proj_definition:
+                    self._srs.ImportFromWkt(proj_definition)
             except TypeError:
                 print('Ignoring TypeError when importing from WKT')
 
             try:
                 if self._srs.ExportToWkt() == "" and \
-                   isinstance(srs_string, str) and \
-                   '+proj' in srs_string:
-                    self._srs.ImportFromProj4(srs_string)
+                   isinstance(proj_definition, str) and \
+                   '+proj' in proj_definition:
+                    self._srs.ImportFromProj4(proj_definition)
             except TypeError:
                 print('Ignoring TypeError when importing from Proj4')
 

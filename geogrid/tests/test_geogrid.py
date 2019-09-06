@@ -45,16 +45,15 @@ def test_can_declare_GeoGrid():
     x_values = np.arange(xdim)
     y_values = np.arange(ydim)
 
-    gg = geogrid.GeoGrid(3411, data_values, x_values, y_values)
-    gg = geogrid.GeoGrid(epsg_3411_as_wkt, data_values, x_values, y_values)
-    gg = geogrid.GeoGrid(epsg_3411_as_proj4, data_values, x_values, y_values)
-
-
-'''
-def test_can_declare_GeoGrid():
-    """Test can initialize a GeoGrid from scratch"""
-    srs_string = 'NETCDF:"../../utils/nh_0630.nc":TB'
     gg = geogrid.GeoGrid(data_values, x_values, y_values, 3411)
     gg = geogrid.GeoGrid(data_values, x_values, y_values, epsg_3411_as_wkt)
     gg = geogrid.GeoGrid(data_values, x_values, y_values, epsg_3411_as_proj4)
+
+
+'''
+def test_can_declare_GeoGrid_by_fname_tidx():
+    """Test can initialize a GeoGrid from scratch"""
+    nc_varstring = 'NETCDF:"../../utils/nh_0630.nc":TB'
+    nc_tindex = 0
+    gg = geogrid.GeoGrid_by_ncref(nc_varstring, nc_tindex)
 '''
