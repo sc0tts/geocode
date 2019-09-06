@@ -50,10 +50,10 @@ def test_can_declare_GeoGrid():
     gg = geogrid.GeoGrid(data_values, x_values, y_values, epsg_3411_as_proj4)
 
 
-'''
 def test_can_declare_GeoGrid_by_fname_tidx():
     """Test can initialize a GeoGrid from scratch"""
-    nc_varstring = 'NETCDF:"../../utils/nh_0630.nc":TB'
+    #nc_varstring = 'dumb'
+    #nc_varstring = 'NETCDF:"./utils/nh_0630.nc":TB'
+    nc_varstring = 'NETCDF:"./utils/nh_0630.nc":TB'
     nc_tindex = 0
-    gg = geogrid.GeoGrid_by_ncref(nc_varstring, nc_tindex)
-'''
+    gg = geogrid.geogrid.GeoGrid_by_ncref(nc_varstring, nc_tindex)

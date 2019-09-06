@@ -4,6 +4,9 @@ geogrid.py
 Provicdes GeoGrid class
 """
 from osgeo import osr
+import gdal
+import gdalconst
+import numpy as np
 
 
 class GeoGrid(object):
@@ -84,20 +87,43 @@ class GeoGrid(object):
         return self._y
 
 
-'''
-    def isValid(self):
-        """Check if all variables have a value"""
-        return self._srs is not None and \
-               self._value is not None and \
-               self._x is not None and \
-               self._y is not None
+def GeoGrid_by_ncref(nc_varstring, nc_timeindex):
+    """Return a GeoGrid by reading a netCDF file"""
+    try:
+        ds = gdal.Open(nc_varstring, gdalconst.GA_ReadOnly)
+        assert ds is not None
+    except AssertionError:
+        raise ValueError('could not open netCDF file: {}'.format(nc_varstring))
 
+    data_array = ds.GetRasterBand(1).ReadAsArray()
+    array_shape = data_array.shape
 
-def transform_point(src_gp, dst_srs):
-    """Transform one gp into another gp with specified SRS"""
-    transform = osr.CoordinateTransformation(src_gp.srs, dst_srs)
-    # Note: ignoring dst_z
-    dst_x, dst_y, dst_z = transform.TransformPoint(src_gp.x, src_gp.y)
+    if len(array_shape) == 2:
+        try:
+            assert nc_timeindex == 0
+        except AssertionError:
+            raise ValueError('array is 2D, but timeindex is not 0')
 
-    return GeoPoint(dst_srs, dst_x, dst_y, src_gp.value)
-'''
+    (ydim, xdim) = array_shape
+
+    print('array shape: {}'.format(array_shape))
+    print('len array shape: {}'.format(len(array_shape)))
+
+    # E.g.: (-3850000.0, 25000.0, 0.0, 5850000.0, 0.0, -25000.0)
+    ds_geotransform = ds.GetGeoTransform()
+    try:
+        assert ds_geotransform[2] == 0
+        assert ds_geotransform[4] == 0
+    except AssertionError:
+        raise ValueError('only 1D x,y values are supported')
+
+    x = np.linspace(
+        ds_geotransform[0] + 0.5 * ds_geotransform[1],
+        ds_geotransform[0] + (xdim - 0.5) * ds_geotransform[1],
+        xdim)
+    y = np.linspace(
+        ds_geotransform[3] + 0.5 * ds_geotransform[5],
+        ds_geotransform[3] + (xdim - 0.5) * ds_geotransform[5],
+        ydim)
+
+    return GeoGrid(data_array, x, y, ds.GetProjection())
