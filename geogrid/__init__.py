@@ -1,2 +1,5 @@
 from geogrid.geopoint import GeoPoint
-import geogrid.geopoint as geopoint
+#from geogrid import geopoint
+
+from geogrid.geogrid import GeoGrid
+#from geogrid import geogrid

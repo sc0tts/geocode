@@ -4,11 +4,11 @@ test_initial.py
 Initial tests to ensure project layout is adequate
 """
 
-import geogrid
 from osgeo import osr
+import geogrid
+from numpy.testing import assert_almost_equal
 #from osgeo import gdal
 #import numpy as np
-from numpy.testing import assert_almost_equal
 
 
 # Helper functions for tests
@@ -17,15 +17,6 @@ polar_stereo_north_srs.ImportFromEPSG(3411)
 
 latlon_srs = osr.SpatialReference()
 latlon_srs.ImportFromEPSG(4326)
-
-
-def create_geopoint_on_psn(
-        srs=polar_stereo_north_srs,
-        xval=-38000,
-        yval=5800000,
-        init_value=100):
-    """Create a sample geopoint on North Polar Stereo projection"""
-    return geogrid.GeoPoint(srs=srs, x=xval, y=yval, value=init_value)
 
 
 def test_imports():
@@ -55,6 +46,15 @@ def test_can_declare_geopoint():
     assert gp.y == yval
     assert gp.value == init_value
     assert gp.srs == srs
+
+
+def create_geopoint_on_psn(
+        srs=polar_stereo_north_srs,
+        xval=-38000,
+        yval=5800000,
+        init_value=100):
+    """Create a sample geopoint on North Polar Stereo projection"""
+    return geogrid.GeoPoint(srs=srs, x=xval, y=yval, value=init_value)
 
 
 def test_geopoint_isValid():
