@@ -8,5 +8,5 @@ name = 'georef'
 from .geopoint import GeoPoint
 from .geogrid import GeoGrid
 
-import georef.nc_info
+#import georef.nc_info
 
