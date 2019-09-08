@@ -6,7 +6,7 @@ Tests for geogrid's GeoGrid class
 Note: some of these tests require a local netCDF file
 """
 
-import geogrid
+import georef
 import numpy as np
 
 
@@ -45,9 +45,9 @@ def test_can_declare_GeoGrid():
     x_values = np.arange(xdim)
     y_values = np.arange(ydim)
 
-    gg = geogrid.GeoGrid(data_values, x_values, y_values, 3411)
-    gg = geogrid.GeoGrid(data_values, x_values, y_values, epsg_3411_as_wkt)
-    gg = geogrid.GeoGrid(data_values, x_values, y_values, epsg_3411_as_proj4)
+    gg = georef.GeoGrid(data_values, x_values, y_values, 3411)
+    gg = georef.GeoGrid(data_values, x_values, y_values, epsg_3411_as_wkt)
+    gg = georef.GeoGrid(data_values, x_values, y_values, epsg_3411_as_proj4)
 
 
 def test_can_declare_GeoGrid_by_fname_tidx():
@@ -56,4 +56,4 @@ def test_can_declare_GeoGrid_by_fname_tidx():
     #nc_varstring = 'NETCDF:"./utils/nh_0630.nc":TB'
     nc_varstring = 'NETCDF:"./utils/nh_0630.nc":TB'
     nc_tindex = 0
-    gg = geogrid.geogrid.GeoGrid_by_ncref(nc_varstring, nc_tindex)
+    gg = georef.geogrid.GeoGrid_by_ncref(nc_varstring, nc_tindex)

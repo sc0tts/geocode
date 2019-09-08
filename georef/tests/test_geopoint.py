@@ -5,7 +5,7 @@ Initial tests to ensure project layout is adequate
 """
 
 from osgeo import osr
-import geogrid
+import georef
 from numpy.testing import assert_almost_equal
 #from osgeo import gdal
 #import numpy as np
@@ -26,7 +26,7 @@ def test_imports():
 
 def test_geopoint_exists():
     """Test can declare an empty GeoPoint class"""
-    gp_empty = geogrid.GeoPoint()
+    gp_empty = georef.GeoPoint()
 
 
 def test_can_declare_geopoint():
@@ -36,7 +36,7 @@ def test_can_declare_geopoint():
     xval=-3800000
     yval=5800000
     init_value=100
-    gp = geogrid.GeoPoint(
+    gp = georef.GeoPoint(
         srs=srs,
         x=xval,
         y=yval,
@@ -54,11 +54,11 @@ def create_geopoint_on_psn(
         yval=5800000,
         init_value=100):
     """Create a sample geopoint on North Polar Stereo projection"""
-    return geogrid.GeoPoint(srs=srs, x=xval, y=yval, value=init_value)
+    return georef.GeoPoint(srs=srs, x=xval, y=yval, value=init_value)
 
 
 def test_geopoint_isValid():
-    gp_empty = geogrid.GeoPoint()
+    gp_empty = georef.GeoPoint()
     assert gp_empty.isValid() == False
 
     gp_minimal = create_geopoint_on_psn()
@@ -68,7 +68,7 @@ def test_geopoint_isValid():
 def test_can_transform_geopoint():
     """Test conversion of geopoint from one SRS to another SRS"""
     gp_on_psn = create_geopoint_on_psn()
-    gp_transformed = geogrid.geopoint.transform_point(gp_on_psn, latlon_srs)
+    gp_transformed = georef.geopoint.transform_point(gp_on_psn, latlon_srs)
     assert gp_transformed.srs == latlon_srs
     assert gp_transformed.value == gp_on_psn.value
     assert_almost_equal(gp_transformed.x, 39.80610930, decimal=5)

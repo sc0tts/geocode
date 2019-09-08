@@ -8,7 +8,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name='geogrid',
+    name='georef',
     version='0.1.0',
     author='J Scott Stewart',
     author_email='james.stewart@colorado.edu',

@@ -106,9 +106,6 @@ def GeoGrid_by_ncref(nc_varstring, nc_timeindex):
 
     (ydim, xdim) = array_shape
 
-    print('array shape: {}'.format(array_shape))
-    print('len array shape: {}'.format(len(array_shape)))
-
     # E.g.: (-3850000.0, 25000.0, 0.0, 5850000.0, 0.0, -25000.0)
     ds_geotransform = ds.GetGeoTransform()
     try:
