@@ -39,13 +39,15 @@ epsg_3411_as_wkt = """
 epsg_3411_as_proj4 = '+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +x_0=0 +y_0=0 +a=6378273 +b=6356889.449 +units=m +no_defs'
 
 default_georef_testnc_fname = \
-     '/home/scotts/bdi_v1/georef/utils/nh_0630.nc'
-#    '/home/scotts/bdi_v1/georef/test_ncfile.nc'
-#        '/home/scotts/bdi_v1/georef/utils/nh_0051.nc'
+    '/home/scotts/bdi_v1/georef/test_ncfile.nc'
+default_georef_testnc_fname_2 = \
+    '/home/scotts/bdi_v1/georef/utils/nh_0630.nc'
+default_georef_testnc_fname_3 = \
+    '/home/scotts/bdi_v1/georef/utils/nh_0051.nc'
 
-default_georef_testnc_varname = 'TB'
-#default_georef_testnc_varname = 'tb'
-#default_georef_testnc_varname = 'sea_ice_concentration'
+default_georef_testnc_varname = 'tb'
+default_georef_testnc_varname_2 = 'TB'
+default_georef_testnc_varname_3 = 'sea_ice_concentration'
 
 
 def test_can_declare_GeoGrid():
@@ -73,18 +75,29 @@ def test_can_declare_GeoGrid_by_fname_tidx():
 
 def test_read_from_netCDF_file():
     """Test that we can read from a specified netCDF file"""
-    #test_nc_fname = '\"test_ncfile.nc\"'
     raw_nc_fname = default_georef_testnc_fname
     quoted_nc_fname = '\"{}\"'.format(raw_nc_fname)
-    if not os.path.isfile(quoted_nc_fname):
+    if not os.path.isfile(raw_nc_fname):
         print('test nc file does not exist, skipping: {}'.format(
-            quoted_nc_fname))
+            raw_nc_fname))
     nc_varname = default_georef_testnc_varname
     nc_timeindex = 9
     nc_filestring = 'NETCDF:{}:{}'.format(quoted_nc_fname, nc_varname)
     nc_geogrid = georef.geogrid.GeoGrid_by_ncref(nc_filestring, nc_timeindex)
-    #print('nc_data:')
-    #print(nc_data)
+    print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
+
+
+def test_read_from_netCDF_file_alt():
+    """Test that we can read from a specified netCDF file"""
+    raw_nc_fname = default_georef_testnc_fname_2
+    quoted_nc_fname = '\"{}\"'.format(raw_nc_fname)
+    if not os.path.isfile(raw_nc_fname):
+        print('test nc file does not exist, skipping: {}'.format(
+            raw_nc_fname))
+    nc_varname = default_georef_testnc_varname_2
+    nc_timeindex = 0
+    nc_filestring = 'NETCDF:{}:{}'.format(quoted_nc_fname, nc_varname)
+    nc_geogrid = georef.geogrid.GeoGrid_by_ncref(nc_filestring, nc_timeindex)
     print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
 
 

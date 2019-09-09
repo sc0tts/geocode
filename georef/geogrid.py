@@ -110,39 +110,16 @@ def GeoGrid_by_ncref(nc_varstring, nc_timeindex=0):
     # ...
     dataset_array = ds.ReadAsArray()
     print('dataset_array.shape: {}'.format(dataset_array.shape))
-    return
-    try:
-        data_array = ds.ReadAsArray()[nc_timeindex]
-    except ValueError:
-        raise ValueError('value error!')
-
-    #pprint(dir(gdal))
-
-    nc_fname_raw = remove_quotes(nc_fname)
-
-    print(data_array.shape)
-    if len(data_array.shape) == 2:
-        try:
-            assert nc_timeindex == 0
-        except AssertionError:
-            #raise ValueError('array is 2D, but timeindex is not 0')
-            print('array is 2D, but timeindex is not 0')
-    else:
+    if len(dataset_array.shape) == 3:
         assert nc_timeindex < ds.RasterCount
+        dataset_array = dataset_array[nc_timeindex]
 
-    print('data_array shape: {}'.format(data_array.shape))
-    print('         (9, 10): {}'.format((9, 10)))
-    (ydim, xdim) = (9, 10)
-    ydim, xdim = (9, 10)
-    das = data_array.shape
-    print('das: {}'.format(das))
-    (ydim, xdim) = das
-    print('nc_varstring: {}'.format(nc_varstring))
-    #print('xdim: {}'.format(xdim))
-    #print('ydim: {}'.format(ydim))
-    return
+    assert len(dataset_array.shape) == 2
 
-    # E.g.: (-3850000.0, 25000.0, 0.0, 5850000.0, 0.0, -25000.0)
+    ydim, xdim = dataset_array.shape
+
+    # Sample geotransform values:
+    #     (-3850000.0, 25000.0, 0.0, 5850000.0, 0.0, -25000.0)
     ds_geotransform = ds.GetGeoTransform()
     try:
         assert ds_geotransform[2] == 0
@@ -159,7 +136,7 @@ def GeoGrid_by_ncref(nc_varstring, nc_timeindex=0):
         ds_geotransform[3] + (ydim - 0.5) * ds_geotransform[5],
         ydim)
 
-    return GeoGrid(data_array, x, y, ds.GetProjection())
+    return GeoGrid(dataset_array, x, y, ds.GetProjection())
 
 
 def get_nc_var_stdname(nc_fname, nc_stdvarname):
