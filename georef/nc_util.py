@@ -164,4 +164,26 @@ def write_simple_netCDF_file(nc_fname, overwrite=False):
 
         conc[time_index, :] = temp_array[:]
 
+    tb = ds.createVariable('tb',
+                              np.float32,
+                              ('time', 'y', 'x',),
+                             zlib=True,
+                             fill_value=np.nan)
+    tb.short_name = 'tb'
+    tb.long_name = 'brightness temperature'
+    tb.standard_name = 'brightness_temperature'
+    tb.units = 'degrees K';
+    tb.grid_mapping = 'polar_stereographic'
+    tb.flag_values = np.array((251, 253, 254, 255), dtype=np.float32)
+    tb.flag_meaning = 'pole_hole coastline land_mask missing_data'
+    for time_index in range(n_times):
+        y_indexes, x_indexes = np.meshgrid(
+            np.linspace(50, 120, data_values.shape[1]),
+            np.linspace(50, 120, data_values.shape[0]),
+                       )
+        tb[time_index, :] = np.add(y_indexes[:], x_indexes[:])
+
+    # Without 'Conventions', gdal complains
+    ds.Conventions = 'CF-1.2'
+
     ds.close()

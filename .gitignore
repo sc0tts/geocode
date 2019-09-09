@@ -10,6 +10,7 @@ __pycache__/
 
 # Ignore local testing files
 pymt_example_grid.py
+local/
 
 # Frequent data or analysis files
 out*

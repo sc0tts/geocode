@@ -6,8 +6,10 @@ Tests for geogrid's GeoGrid class
 Note: some of these tests require a local netCDF file
 """
 
+import os
 import georef
 import numpy as np
+import netCDF4
 
 
 epsg_3411_as_wkt = """
@@ -36,6 +38,15 @@ epsg_3411_as_wkt = """
 
 epsg_3411_as_proj4 = '+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +x_0=0 +y_0=0 +a=6378273 +b=6356889.449 +units=m +no_defs'
 
+default_georef_testnc_fname = \
+     '/home/scotts/bdi_v1/georef/utils/nh_0630.nc'
+#    '/home/scotts/bdi_v1/georef/test_ncfile.nc'
+#        '/home/scotts/bdi_v1/georef/utils/nh_0051.nc'
+
+default_georef_testnc_varname = 'TB'
+#default_georef_testnc_varname = 'tb'
+#default_georef_testnc_varname = 'sea_ice_concentration'
+
 
 def test_can_declare_GeoGrid():
     """Test can initialize a GeoGrid from scratch"""
@@ -54,6 +65,38 @@ def test_can_declare_GeoGrid_by_fname_tidx():
     """Test can initialize a GeoGrid from scratch"""
     #nc_varstring = 'dumb'
     #nc_varstring = 'NETCDF:"./utils/nh_0630.nc":TB'
-    nc_varstring = 'NETCDF:"./utils/nh_0630.nc":TB'
+    nc_varstring = 'NETCDF:\"{}\":{}'.format(default_georef_testnc_fname,
+                                             default_georef_testnc_varname)
     nc_tindex = 0
     gg = georef.geogrid.GeoGrid_by_ncref(nc_varstring, nc_tindex)
+
+
+def test_read_from_netCDF_file():
+    """Test that we can read from a specified netCDF file"""
+    #test_nc_fname = '\"test_ncfile.nc\"'
+    raw_nc_fname = default_georef_testnc_fname
+    quoted_nc_fname = '\"{}\"'.format(raw_nc_fname)
+    if not os.path.isfile(quoted_nc_fname):
+        print('test nc file does not exist, skipping: {}'.format(
+            quoted_nc_fname))
+    nc_varname = default_georef_testnc_varname
+    nc_timeindex = 9
+    nc_filestring = 'NETCDF:{}:{}'.format(quoted_nc_fname, nc_varname)
+    nc_geogrid = georef.geogrid.GeoGrid_by_ncref(nc_filestring, nc_timeindex)
+    #print('nc_data:')
+    #print(nc_data)
+    print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
+
+
+def test_get_ncvarname_from_stdname():
+    """Test determination of nc variable name given fname and standard name"""
+    # Note: hard-coding to 0051-equivalent file
+    raw_nc_fname = '/home/scotts/bdi_v1/georef/utils/nh_0051.nc'
+    if not os.path.isfile(raw_nc_fname):
+        print('test nc file does not exist, skipping: {}'.format(
+            raw_nc_fname))
+        return
+    stdname = 'sea_ice_area_fraction'
+    expected_varname = 'conc'
+    nc_varname = georef.geogrid.get_nc_var_stdname(raw_nc_fname, stdname)
+    assert nc_varname == expected_varname
