@@ -10,6 +10,7 @@ import os
 import georef
 import numpy as np
 import netCDF4
+import datetime
 
 
 epsg_3411_as_wkt = """
@@ -84,7 +85,8 @@ def test_read_from_netCDF_file():
     nc_timeindex = 9
     nc_filestring = 'NETCDF:{}:{}'.format(quoted_nc_fname, nc_varname)
     nc_geogrid = georef.geogrid.GeoGrid_by_ncref(nc_filestring, nc_timeindex)
-    print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
+    #print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
+    assert str(type(nc_geogrid)) == "<class 'georef.geogrid.GeoGrid'>"
 
 
 def test_read_from_netCDF_file_alt():
@@ -98,7 +100,8 @@ def test_read_from_netCDF_file_alt():
     nc_timeindex = 0
     nc_filestring = 'NETCDF:{}:{}'.format(quoted_nc_fname, nc_varname)
     nc_geogrid = georef.geogrid.GeoGrid_by_ncref(nc_filestring, nc_timeindex)
-    print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
+    #print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
+    assert str(type(nc_geogrid)) == "<class 'georef.geogrid.GeoGrid'>"
 
 
 def test_get_ncvarname_from_stdname():
@@ -113,3 +116,69 @@ def test_get_ncvarname_from_stdname():
     expected_varname = 'conc'
     nc_varname = georef.geogrid.get_nc_var_stdname(raw_nc_fname, stdname)
     assert nc_varname == expected_varname
+
+
+def test_can_get_time_from_nc_file():
+    """Test retrieval of time values from netCDF file"""
+    # Homemade .nc file
+    nc_fname = default_georef_testnc_fname
+    if not os.path.isfile(nc_fname):
+        print('Testing nc file does not exist, skipping: {}'.format(nc_fname))
+        return
+
+    nc_time_values = georef.geogrid.get_nc_timevalues(nc_fname)
+
+    assert (10,) == nc_time_values.shape
+
+    if len(nc_time_values) > 1:
+        assert type(nc_time_values[0]) == \
+               type(datetime.datetime(2019, 1, 1, 12, 0))
+
+    # NSIDC 0630 .nc file
+    nc_fname = default_georef_testnc_fname_2
+    if not os.path.isfile(nc_fname):
+        print('Testing nc file does not exist, skipping: {}'.format(nc_fname))
+        return
+
+    nc_time_values = georef.geogrid.get_nc_timevalues(nc_fname)
+
+    assert (1,) == nc_time_values.shape
+
+    # Verify that we get a datetime.datetime object
+    assert type(nc_time_values[0]) == \
+           type(datetime.datetime(2019, 1, 1, 12, 0))
+
+    # NSIDC 0051 .nc file
+    nc_fname = default_georef_testnc_fname_3
+    if not os.path.isfile(nc_fname):
+        print('Testing nc file does not exist, skipping: {}'.format(nc_fname))
+        return
+
+    nc_time_values = georef.geogrid.get_nc_timevalues(nc_fname)
+
+    assert (1,) == nc_time_values.shape
+
+    # Verify that we get a datetime.datetime object
+    assert type(nc_time_values[0]) == \
+           type(datetime.datetime(2019, 1, 1, 12, 0))
+
+
+def test_find_specific_nc_time_index():
+    """Test that we can return the time value with a specified index"""
+    # Homemade .nc file
+    nc_fname = default_georef_testnc_fname
+    if not os.path.isfile(nc_fname):
+        print('Testing nc file does not exist, skipping: {}'.format(nc_fname))
+        return
+
+    """
+    specified_date = datetime.date(2018, 1, 8)
+    nc_specific_index = georef.geogrid.get_specific_nc_timeindex(
+        nc_fname, specified_date)
+    assert nc_specific_index == 1
+
+    """
+    specified_date = datetime.datetime(2018, 1, 8, 12, 0)
+    nc_specific_index = georef.geogrid.get_specific_nc_timeindex(
+        nc_fname, specified_date)
+    assert nc_specific_index == 1
