@@ -51,6 +51,17 @@ default_georef_testnc_varname_2 = 'TB'
 default_georef_testnc_varname_3 = 'sea_ice_concentration'
 
 
+def simple_GeoGrid_values():
+    """Returns a simple set of values that can initialize a GeoGrid"""
+    xdim = 3
+    ydim = 4
+    data_values = np.arange(12.).reshape((ydim, xdim))
+    x_values = np.arange(xdim)
+    y_values = np.arange(ydim)
+
+    return data_values, x_values, y_values
+
+
 def test_can_declare_GeoGrid():
     """Test can initialize a GeoGrid from scratch"""
     xdim = 3
@@ -182,3 +193,37 @@ def test_find_specific_nc_time_index():
     nc_specific_index = georef.geogrid.get_specific_nc_timeindex(
         nc_fname, specified_date)
     assert nc_specific_index == 1
+
+
+def test_bad_projdef_yields_Warningo():
+    """Test that a bad projdef raises a Warning"""
+    try:
+        dvals, xvals, yvals = simple_GeoGrid_values()
+        gg = georef.GeoGrid(dvals, xvals, yvals, 'non-proj4_string',
+                           warn=True)
+    except Warning:
+        return
+
+    raise ValueError('Warning not raised for bad proj description')
+
+
+def test_reproject_geogrid():
+    """Test that we can reproject a geogrid"""
+    dvals, xvals, yvals = simple_GeoGrid_values()
+    gg = georef.GeoGrid(dvals, xvals, yvals, 3411)
+
+    out_xdim = 100
+    out_ydim = 100
+    out_geotransform = (-165., 0.1, 0.0, 65.0, 0.0, -0.1)
+
+    gg_reproj = georef.geogrid.reproject_GeoGrid(
+        gg, 4326, out_xdim, out_ydim, out_geotransform)
+
+
+def test_saveasGeotiff():
+    """Test that we can save a GeoGrid as a geotiff"""
+    test_fn = 'test_geotiff.tif'
+    if not os.path.isfile(test_fn):
+        dvals, xvals, yvals = simple_GeoGrid_values()
+        gg = georef.GeoGrid(dvals, xvals, yvals, 3411)
+        gg.saveAsGeotiff(test_fn)

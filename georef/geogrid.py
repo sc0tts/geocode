@@ -12,42 +12,77 @@ import netCDF4
 import datetime
 
 
+gdal.UseExceptions()
+
+def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
+    """Define the srs by interpreting 'projdef' as epsg code, WKT, or PROJ4"""
+    try:
+        if srs.ExportToWkt() == "" and \
+           isinstance(projdef, int):
+            srs.ImportFromEPSG(projdef)
+    except TypeError:
+        if verbose:
+            print('Ignoring TypeError when importing from epsg')
+
+    try:
+        if srs.ExportToWkt() == "" and \
+           isinstance(projdef, str) and \
+           'PROJ' in projdef:
+            srs.ImportFromWkt(projdef)
+    except TypeError:
+        if verbose:
+            print('Ignoring TypeError when importing from WKT')
+
+    try:
+        if srs.ExportToWkt() == "" and \
+           isinstance(projdef, str) and \
+           '+proj' in projdef:
+            srs.ImportFromProj4(projdef)
+    except TypeError:
+        if verbose:
+            print('Ignoring TypeError when importing from Proj4')
+
+    if warn:
+        if srs.ExportToWkt() == "":
+            if verbose:
+                print('projdef was: {}'.format(projdef))
+            raise Warning('SRS not determined in GeoGrid initialization')
+
+
+def get_gdal_datatype(in_datatype):
+    """Returns the GDAL data type for this data type"""
+    print('in_datatype: {}'.format(in_datatype))
+    if in_datatype == 'float64':
+        return gdalconst.GDT_Float64
+    elif in_datatype == 'float32':
+        return gdalconst.GDT_Float32
+
+
 class GeoGrid(object):
     """geocode's located-array class"""
-    def __init__(self, array=None, x=None, y=None, proj_definition=None):
+    def __init__(self, array=None, x=None, y=None, proj_definition=None,
+                verbose=False, warn=False, nodataval=None):
         """GeoGrid is an array with projection"""
         self._srs = osr.SpatialReference()
 
         if proj_definition is not None:
-            try:
-                if self._srs.ExportToWkt() == "" and \
-                   isinstance(proj_definition, int):
-                    self._srs.ImportFromEPSG(proj_definition)
-            except TypeError:
-                print('Ignoring TypeError when importing from epsg')
+            assign_projection_to_srs(self._srs, proj_definition,
+                                     verbose=verbose, warn=warn)
 
-            try:
-                if self._srs.ExportToWkt() == "" and \
-                   isinstance(proj_definition, str) and \
-                   'PROJ' in proj_definition:
-                    self._srs.ImportFromWkt(proj_definition)
-            except TypeError:
-                print('Ignoring TypeError when importing from WKT')
+        if warn:
+            if self._srs.ExportToWkt() == "":
+                raise Warning('SRS not determined in GeoGrid initialization')
 
-            try:
-                if self._srs.ExportToWkt() == "" and \
-                   isinstance(proj_definition, str) and \
-                   '+proj' in proj_definition:
-                    self._srs.ImportFromProj4(proj_definition)
-            except TypeError:
-                print('Ignoring TypeError when importing from Proj4')
-
-        if self._srs.ExportToWkt() == "":
-            #print('Warning: SRS not determined in GeoGrid initialization')
-            raise Warning('SRS not determined in GeoGrid initialization')
+        if nodataval is None and isinstance(array[0, 0], float):
+            self._NoDataValue = np.nan
+        elif nodataval is not None:
+            self._NoDataValue = nodataval
+        else:
+            self._NoDataValue = None
 
         self._x = x
         self._y = y
+        self._set_geotransform(x, y)
 
         self._data_array = array
         try:
@@ -63,29 +98,97 @@ class GeoGrid(object):
                 'length of y ({}) does not correspond to array dim ({})'
                 .format(self._data_array.shape[0], len(self._y)))
 
+    def _set_geotransform(self, xvals, yvals):
+        """Compute the geotransform string from the x and y values"""
+        xdim = len(xvals)
+        ydim = len(yvals)
+
+        x0 = xvals[0]
+        y0 = yvals[0]
+
+        dx = xvals[1] - xvals[0]
+        dy = yvals[1] - yvals[0]
+
+        x_leftedge = x0 - dx / 2
+        y_topedge = y0 + dx / 2
+
+        xlast = x0 + (xdim -1) * dx
+        ylast = y0 + (ydim -1) * dy
+
+        assert abs(xlast - xvals[xdim - 1]) < \
+               abs(max(xlast, xvals[xdim - 1])) / 1000.
+
+        self._geotransform = (x_leftedge, dx, 0., y_topedge, 0., dy)
+
 
     @property
     def data_array(self):
         """Return the array of values"""
         return self._data_array
 
-
     @property
     def srs(self):
         """Return the srs"""
         return self._srs
-
 
     @property
     def x(self):
         """Return the x values"""
         return self._x
 
-
     @property
     def y(self):
         """Return the y values"""
         return self._y
+
+    @property
+    def xdim(self):
+        """Return the number of x values"""
+        return len(self._x)
+
+    @property
+    def ydim(self):
+        """Return the number of y values"""
+        return len(self._y)
+
+    @property
+    def geotransform(self):
+        """Return the 'geotransform' equivalent of the coordinates"""
+        return self._geotransform
+
+    def saveAsGeotiff(self, geotiff_fname):
+        """Save the GeoGrid as a geotiff with the given fname"""
+        # Note: Geotiffs can't be 64-bit floats
+        src_datatype = get_gdal_datatype(self._data_array.dtype)
+        if src_datatype == gdalconst.GDT_Float64:
+            src_datatype = gdalconst.GDT_Float32
+
+        # Note: can't save geotiff as 64-bit float
+        if src_datatype == gdalconst.GDT_Float64:
+            dst_datatype = gdalconst.GDT_Float32
+        else:
+            dst_datatype = src_datatype
+
+        src = gdal.GetDriverByName('Gtiff').Create(
+            geotiff_fname,
+            len(self._x),
+            len(self._y),
+            1,
+            src_datatype)
+
+        src.SetGeoTransform(self._geotransform)
+        src.SetProjection(self._srs.ExportToWkt())
+
+        src_raster = src.GetRasterBand(1)
+        if self._NoDataValue is not None:
+            src_raster.SetNoDataValue(self._NoDataValue)
+
+        if self._data_array.dtype == 'float64':
+            src_raster.WriteArray(self._data_array.astype(np.float32))
+        else:
+            src_raster.WriteArray(self._data_array)
+
+        src_raster.FlushCache()
 
 
 def remove_quotes(fname_string):
@@ -254,6 +357,95 @@ def get_specific_nc_timeindex(fname,
             nearest_diff = this_diff
 
     return nearest_index
+
+
+def reproject_GeoGrid(geogrid_in, srs_string,
+                     out_xdim=None, out_ydim=None, out_geotransform=None,
+                     out_nodata_value=None, interp_method=None):
+    """Reproject geogrid_in onto srs_out"""
+    in_srs = geogrid_in.srs
+    out_srs = osr.SpatialReference()
+    assign_projection_to_srs(out_srs, srs_string)
+
+
+    if interp_method is None:
+        """
+        I think the options are:
+            GRA_Average
+            GRA_Bilinear
+            GRA_Cubic
+            GRA_CubicSpline
+            GRA_NearestNeighbour
+        """
+        interp_method = gdalconst.GRA_NearestNeighbour
+    elif isinstance(interp_method, str) and \
+            interp_method.lower() in ('nearest', 'nearestneighbor',):
+        interp_method = gdalconst.GRA_NearestNeighbour
+    elif isinstance(interp_method, str) and \
+            interp_method.lower() in ('linear', 'bilinear',):
+        interp_method = gdalconst.GRA_Bilinear
+    elif isinstance(interp_method, str) and \
+            interp_method.lower() in ('spline', 'cubicspline',):
+        interp_method = gdalconst.GRA_CubicSpline
+    elif isinstance(interp_method, str) and \
+            interp_method.lower() in ('avg', 'average',):
+        interp_method = gdalconst.GRA_Average
+    else:
+        raise ValueError('interp_method not recognized: {}'.format(
+            interp_method))
+
+    # Autodetection of transform coords is not supported yet:
+    if out_xdim is None or \
+       out_ydim is None or \
+       out_geotransform is None:
+        raise ValueError(
+            'Currently need to specify out_xdim, out_ydim, out_geotransform')
+
+    if out_nodata_value is None:
+        try:
+            out_nodata_value = geogrid_in.NoDataValue()
+        except AttributeError:
+            out_nodata_value = np.nan
+
+    src_array_dtype = geogrid_in.data_array.dtype
+
+    if src_array_dtype == 'float64':
+        src_datatype = gdalconst.GDT_Float64
+    else:
+        raise ValueError('Could not determine src_datatype')
+
+
+    src_srs = geogrid_in.srs
+    dst_srs = out_srs
+
+    src_geotransform = geogrid_in.geotransform
+
+    dst_datatype = src_datatype
+
+    src = gdal.GetDriverByName('MEM').Create(
+        '', geogrid_in.xdim, geogrid_in.ydim, 1, src_datatype)
+
+    dst = gdal.GetDriverByName('MEM').Create(
+        '', out_xdim, out_ydim, 1, dst_datatype)
+
+    src.SetGeoTransform(src_geotransform)
+    src.SetProjection(geogrid_in.srs.ExportToWkt())
+
+    dst.SetGeoTransform(out_geotransform)
+    dst.SetProjection(out_srs.ExportToWkt())
+
+    src_raster = src.GetRasterBand(1)
+    src_raster.SetNoDataValue(out_nodata_value)
+    src_raster.WriteArray(geogrid_in.data_array)
+
+    dst_raster = src.GetRasterBand(1)
+    dst_raster.SetNoDataValue(out_nodata_value)
+
+    gdal.ReprojectImage(src,
+                        dst,
+                        geogrid_in.srs.ExportToWkt(),
+                        out_srs.ExportToWkt(),
+                        interp_method)
 
 
 """
