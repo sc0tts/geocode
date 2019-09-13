@@ -106,6 +106,19 @@ def create_geotiff(out_fn, x_values, y_values, data_values, wkt, geotransform):
     ds.FlushCache()
 
 
+def WKT_are_Proj4_equivalent(wkt1, wkt2):
+    """Test that these WKT strings have equivalent proj4 strings"""
+    srs1 = osr.SpatialReference()
+    srs1.ImportFromWkt(wkt1)
+    proj1 = srs1.ExportToProj4()
+
+    srs2 = osr.SpatialReference()
+    srs2.ImportFromWkt(wkt2)
+    proj2 = srs1.ExportToProj4()
+
+    return proj1 == proj2
+
+
 def test_can_declare_GeoGrid():
     """Test can initialize a GeoGrid from scratch"""
     xdim = 3
@@ -114,15 +127,21 @@ def test_can_declare_GeoGrid():
     x_values = np.arange(xdim)
     y_values = np.arange(ydim)
 
+    test_srs = osr.SpatialReference()
+    test_srs.ImportFromEPSG(3411)
+
     gg = georef.GeoGrid(data_values, x_values, y_values, 3411)
+    assert test_srs.ExportToWkt() == gg.wkt
+
     gg = georef.GeoGrid(data_values, x_values, y_values, epsg_3411_as_wkt)
+    assert test_srs.ExportToWkt() == gg.wkt
+
     gg = georef.GeoGrid(data_values, x_values, y_values, epsg_3411_as_proj4)
+    assert WKT_are_Proj4_equivalent(test_srs.ExportToWkt(), gg.wkt)
 
 
 def test_can_declare_GeoGrid_by_fname_tidx():
     """Test can initialize a GeoGrid from scratch"""
-    #nc_varstring = 'dumb'
-    #nc_varstring = 'NETCDF:"./utils/nh_0630.nc":TB'
     nc_varstring = 'NETCDF:\"{}\":{}'.format(default_georef_testnc_fname,
                                              default_georef_testnc_varname)
     nc_tindex = 0
@@ -140,7 +159,6 @@ def test_read_from_netCDF_file():
     nc_timeindex = 9
     nc_filestring = 'NETCDF:{}:{}'.format(quoted_nc_fname, nc_varname)
     nc_geogrid = georef.geogrid.GeoGrid_by_ncref(nc_filestring, nc_timeindex)
-    #print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
     assert str(type(nc_geogrid)) == "<class 'georef.geogrid.GeoGrid'>"
 
 
@@ -155,7 +173,6 @@ def test_read_from_netCDF_file_alt():
     nc_timeindex = 0
     nc_filestring = 'NETCDF:{}:{}'.format(quoted_nc_fname, nc_varname)
     nc_geogrid = georef.geogrid.GeoGrid_by_ncref(nc_filestring, nc_timeindex)
-    #print('type(nc_geogrid): {}'.format(type(nc_geogrid)))
     assert str(type(nc_geogrid)) == "<class 'georef.geogrid.GeoGrid'>"
 
 
@@ -226,13 +243,6 @@ def test_find_specific_nc_time_index():
         print('Testing nc file does not exist, skipping: {}'.format(nc_fname))
         return
 
-    """
-    specified_date = datetime.date(2018, 1, 8)
-    nc_specific_index = georef.geogrid.get_specific_nc_timeindex(
-        nc_fname, specified_date)
-    assert nc_specific_index == 1
-
-    """
     specified_date = datetime.datetime(2018, 1, 8, 12, 0)
     nc_specific_index = georef.geogrid.get_specific_nc_timeindex(
         nc_fname, specified_date)
@@ -251,39 +261,41 @@ def test_bad_projdef_yields_Warningo():
     raise ValueError('Warning not raised for bad proj description')
 
 
-def test_warp_geogrid():
-    """Test that we can warp a geogrid"""
+def test_geogrid_to_VRT():
+    """Test that we can create a valid in-memory GDAL model from geogrid"""
     dvals, xvals, yvals, wkt = simple_GeoGrid_values()
-    #gg = georef.GeoGrid(dvals, xvals, yvals, wkt)
+    print('wkt: {}'.format(wkt))
+    gg = georef.GeoGrid(dvals.astype(np.float32), xvals, yvals, wkt, warn=True)
+    assert gg.isComplete()
+
+    mem_gg = georef.geogrid.geogrid_as_gdalInMem(gg)
+    gg_from_mem = georef.geogrid.geogrid_from_gdalInMem(mem_gg)
+
+    assert gg_from_mem.isComplete()
+
+
+def test_reproject_geogrid():
+    """Test that we can reproject a geogrid"""
+    dvals, xvals, yvals, wkt = simple_GeoGrid_values()
     gg = georef.GeoGrid(dvals.astype(np.float32), xvals, yvals, wkt)
 
     print('in_geotransform:\n  {}'.format(gg.geotransform))
     gg.saveAsGeotiff('test_gg_preproj.tif')
 
-    """
-    print('gg.data:\n  {}'.format(gg.data_array))
-    print('gg.geotransform:  {}'.format(gg.geotransform))
-    print('gg.xdim:  {}'.format(gg.xdim))
-    print('gg.ydim:  {}'.format(gg.ydim))
-    print('right edge x: {}'.format(
-        gg.x[0] + (gg.xdim - 0.5) * gg.geotransform[1]))
-    print('bottom edge y: {}'.format(
-        gg.y[0] + (gg.ydim - 0.5) * gg.geotransform[5]))
-    """
-
     # Reprojection parameters
     out_xdim = 100
     out_ydim = 100
 
-    #out_epsg = 4326
-    #out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
+    out_epsg = 4326
+    out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
 
-    out_epsg = 3411
-    out_geotransform = (-2737500.0, 2000.0, 0.0, 1412500.0, 0.0, -2000.0)
+    #out_epsg = 3411
+    #out_geotransform = (-2737500.0, 2000.0, 0.0, 1412500.0, 0.0, -2000.0)
 
     gg_reproj = georef.geogrid.reproject_GeoGrid(
         gg, out_epsg, out_xdim, out_ydim, out_geotransform)
-    gg_reproj.saveAsGeotiff('test_reproj.tif')
+
+    #gg_reproj.saveAsGeotiff('test_reproj.tif')
 
     """
     gg2 = gg_reproj

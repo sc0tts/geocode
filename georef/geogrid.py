@@ -20,6 +20,7 @@ def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
     try:
         if srs.ExportToWkt() == "" and \
            isinstance(projdef, int):
+            print(' in 1')
             srs.ImportFromEPSG(projdef)
     except TypeError:
         if verbose:
@@ -28,7 +29,8 @@ def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
     try:
         if srs.ExportToWkt() == "" and \
            isinstance(projdef, str) and \
-           'PROJ' in projdef:
+           ('PROJ' in projdef or 'GEOGCS' in projdef):
+            print(' in 2')
             srs.ImportFromWkt(projdef)
     except TypeError:
         if verbose:
@@ -38,11 +40,14 @@ def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
         if srs.ExportToWkt() == "" and \
            isinstance(projdef, str) and \
            '+proj' in projdef:
+            print(' in 3')
             srs.ImportFromProj4(projdef)
     except TypeError:
         if verbose:
             print('Ignoring TypeError when importing from Proj4')
 
+    print('in assign_projection...')
+    print('projdef:\n  {}'.format(projdef))
     if warn:
         if srs.ExportToWkt() == "":
             if verbose:
@@ -74,6 +79,8 @@ class GeoGrid(object):
         if proj_definition is not None:
             assign_projection_to_srs(self._srs, proj_definition,
                                      verbose=verbose, warn=warn)
+            print('Created _srs with WKT:\n  {}'.format(
+                self._srs.ExportToWkt()))
 
         if warn:
             if self._srs.ExportToWkt() == "":
@@ -128,14 +135,14 @@ class GeoGrid(object):
 
 
     @property
+    def wkt(self):
+        """Return the srs"""
+        return str(self._srs.ExportToWkt())
+
+    @property
     def data_array(self):
         """Return the array of values"""
         return self._data_array
-
-    @property
-    def srs(self):
-        """Return the srs"""
-        return self._srs
 
     @property
     def x(self):
@@ -188,6 +195,35 @@ class GeoGrid(object):
             geotiff_fname, gggdal)
         dst = None
 
+    def isComplete(self):
+        """Verify that this GeoGrid has the minimum attributes"""
+        assert len(self._x) > 0
+        assert len(self._y) > 0
+        assert 2 == len(self._data_array.shape)
+        assert self.wkt is not None
+        assert self.wkt != ''
+
+        return True
+
+
+def geogrid_from_gdalInMem(ds):
+    """Create a GeoGrid from a GDAL in-memory object"""
+    in_data = ds.GetRasterBand(1).ReadAsArray()
+    in_xdim = ds.RasterXSize
+    in_ydim = ds.RasterYSize
+    in_geotransform = ds.GetGeoTransform()
+    in_xvals = np.linspace(
+        in_geotransform[0] + 0.5 * in_geotransform[1],
+        in_geotransform[0] + (in_xdim - 0.5) * in_geotransform[1],
+        in_xdim)
+    in_yvals = np.linspace(
+        in_geotransform[3] + 0.5 * in_geotransform[5],
+        in_geotransform[3] + (in_ydim - 0.5) * in_geotransform[5],
+        in_ydim)
+    in_wkt = ds.GetProjection()
+
+    return GeoGrid(in_data, in_xvals, in_yvals, in_wkt, warn=True)
+
 
 def geogrid_as_gdalInMem(gg):
     """Convert GeoGrid to gdal in-memory dataset"""
@@ -195,12 +231,12 @@ def geogrid_as_gdalInMem(gg):
     in_ydim = len(gg.y)
     in_datatype = get_gdal_datatype(gg.data_array.dtype)
     in_geotransform = gg.geotransform
-    in_srs = gg.srs
+    in_wkt = gg.wkt
     in_data = gg.data_array
 
     ds = gdal.GetDriverByName('MEM').Create(
         '', in_xdim, in_ydim, 1, in_datatype)
-    ds.SetProjection(in_srs.ExportToWkt())
+    ds.SetProjection(in_wkt)
     ds.SetGeoTransform(in_geotransform)
     ds.GetRasterBand(1).WriteArray(in_data)
 
@@ -375,39 +411,63 @@ def get_specific_nc_timeindex(fname,
     return nearest_index
 
 
+def getGdalInterpMethod(in_method):
+    """Return the appropriate GDAL constant for this string
+
+    I think the options are:
+        GRA_Average
+        GRA_Bilinear
+        GRA_Cubic
+        GRA_CubicSpline
+        GRA_NearestNeighbour
+    """
+
+    if in_method is None:
+        return gdalconst.GRA_NearestNeighbour
+    else:
+        method = in_method.copy()
+
+    if isinstance(method, int):
+        try:
+            assert method in (
+                gdalconst.GRA_NearestNeighbour,
+                gdalconst.GRA_Bilinear,
+                gdalconst.GRA_CubicSpline,
+                gdalconst.GRA_Average,
+            )
+        except AssertionError:
+            raise ValueError('int method not recognized: {}'.format(method))
+
+    elif isinstance(method, str) and \
+            method.lower() in ('nearest', 'nearestneighbor',):
+        method = gdalconst.GRA_NearestNeighbour
+    elif isinstance(method, str) and \
+            method.lower() in ('linear', 'bilinear',):
+        method = gdalconst.GRA_Bilinear
+    elif isinstance(method, str) and \
+            method.lower() in ('spline', 'cubicspline',):
+        method = gdalconst.GRA_CubicSpline
+    elif isinstance(method, str) and \
+            method.lower() in ('avg', 'average',):
+        method = gdalconst.GRA_Average
+    else:
+        raise ValueError('method not recognized: {}'.format(method))
+
+    return method
+
+
 def reproject_GeoGrid(geogrid_in, srs_string,
                      out_xdim=None, out_ydim=None, out_geotransform=None,
                      out_nodata_value=None, interp_method=None):
     """Reproject geogrid_in onto srs_out"""
-    in_srs = geogrid_in.srs
+    src = geogrid_as_gdalInMem(geogrid_in)
+
+    in_wkt = geogrid_in.wkt
     out_srs = osr.SpatialReference()
     assign_projection_to_srs(out_srs, srs_string)
+    out_wkt = out_srs.ExportToWkt()
 
-    if interp_method is None:
-        """
-        I think the options are:
-            GRA_Average
-            GRA_Bilinear
-            GRA_Cubic
-            GRA_CubicSpline
-            GRA_NearestNeighbour
-        """
-        interp_method = gdalconst.GRA_NearestNeighbour
-    elif isinstance(interp_method, str) and \
-            interp_method.lower() in ('nearest', 'nearestneighbor',):
-        interp_method = gdalconst.GRA_NearestNeighbour
-    elif isinstance(interp_method, str) and \
-            interp_method.lower() in ('linear', 'bilinear',):
-        interp_method = gdalconst.GRA_Bilinear
-    elif isinstance(interp_method, str) and \
-            interp_method.lower() in ('spline', 'cubicspline',):
-        interp_method = gdalconst.GRA_CubicSpline
-    elif isinstance(interp_method, str) and \
-            interp_method.lower() in ('avg', 'average',):
-        interp_method = gdalconst.GRA_Average
-    else:
-        raise ValueError('interp_method not recognized: {}'.format(
-            interp_method))
+    gdal_interp_method = getGdalInterpMethod(interp_method)
 
     # Autodetection of transform coords is not supported yet:
     if out_xdim is None or \
@@ -435,9 +495,8 @@ def reproject_GeoGrid(geogrid_in, srs_string,
             src_array_dtype))
 
 
-    src_srs = geogrid_in.srs
-    #dst_srs = out_srs
-    dst_srs = src_srs
+    src_wkt = geogrid_in.wkt
+    dst_wkt = src_wkt
 
     src_geotransform = geogrid_in.geotransform
     dst_geotransform = geogrid_in.geotransform
@@ -455,7 +514,7 @@ def reproject_GeoGrid(geogrid_in, srs_string,
     print('dst init RasterYSize: {}'.format(dst.RasterYSize))
 
     src.SetGeoTransform(src_geotransform)
-    src.SetProjection(geogrid_in.srs.ExportToWkt())
+    src.SetProjection(geogrid_in.wkt)
 
     dst.SetGeoTransform(out_geotransform)
     dst.SetProjection(out_srs.ExportToWkt())
@@ -471,20 +530,50 @@ def reproject_GeoGrid(geogrid_in, srs_string,
 
     #dst_raster.SetNoDataValue(out_nodata_value)
 
+    print('\nOverwriting the dst values...')
+    dst.SetProjection(geogrid_in.wkt)
+    #dst.SetGeoTransform((-163.0, 0.05, 0.0, 64.25, 0.0, -0.025))
+
+    latlon_srs = osr.SpatialReference()
+    latlon_srs.ImportFromEPSG(4326)
+
+    psn_srs = osr.SpatialReference()
+    psn_srs.ImportFromEPSG(3411)
+    #print('latlon_aswkt: {}'.format(latlon_srs.ExportToWkt()))
+
+    src.SetProjection(latlon_srs.ExportToWkt())
+    dst.SetProjection(psn_srs.ExportToWkt())
+
     print('src geotransform: {}'.format(src.GetGeoTransform()))
     print('dst geotransform: {}'.format(dst.GetGeoTransform()))
 
-    print('out_srs: {}'.format(out_srs.ExportToWkt()))
+    print('in_srs: {}'.format(src.GetProjection()))
+    print('geogrid_in.wkt: {}'.format(geogrid_in.wkt))
+    print('geogrid_in.wkt == '': {}'.format(geogrid_in.wkt == ''))
+    print('geogrid_in.wkt: {}'.format(repr(geogrid_in.wkt)))
+
+    print('dst.GetProj: {}'.format(dst.GetProjection()))
+    print('because: {}'.format(geogrid_in.wkt))
+
     print('about to reproject')
-    gdal.ReprojectImage(src,
+    res = gdal.ReprojectImage(src,
                         dst,
                         src.GetProjection(),
                         dst.GetProjection(),
-                        gdal.GRA_NearestNeighbour,
+                        gdal.GRA_Max,
                        )
+    print(' ')
+    print('res: {}'.format(res))
+    #gdal.ReprojectImage(src,
+    #                    dst,
+    #                    src.GetProjection(),
+    #                    dst.GetProjection(),
+    #                    gdal.GRA_NearestNeighbour,
+    #                   )
 
     src_data = src.GetRasterBand(1).ReadAsArray()
     print(' ')
+    print('src geotransform: {}'.format(src.GetGeoTransform()))
     print('src data shape: {}'.format(src_data.shape))
     print('src datatype: {}'.format(src_data.dtype))
     print('src data min: {}'.format(src_data.min()))
@@ -493,18 +582,19 @@ def reproject_GeoGrid(geogrid_in, srs_string,
     j = 0
     gt = src.GetGeoTransform()
     print('src UL: ({}, {})'.format(
-        gt[0] + gt[1] * (i + 0.5),
-        gt[3] + gt[5] * (j + 0.5),
+        gt[0] + gt[1] * i,
+        gt[3] + gt[5] * j,
     ))
     i = src_data.shape[1] - 1
     j = src_data.shape[0] - 1
     print('src LR: ({}, {})'.format(
-        gt[0] + gt[1] * (i + 0.5),
-        gt[3] + gt[5] * (j + 0.5),
+        gt[0] + gt[1] * i,
+        gt[3] + gt[5] * j,
     ))
 
     print(' ')
     dst_data = dst.GetRasterBand(1).ReadAsArray()
+    print('dst geotransform: {}'.format(dst.GetGeoTransform()))
     print('dst data shape: {}'.format(dst_data.shape))
     print('dst datatype: {}'.format(dst_data.dtype))
     print('dst data min: {}'.format(dst_data.min()))
@@ -512,15 +602,16 @@ def reproject_GeoGrid(geogrid_in, srs_string,
 
     gt = dst.GetGeoTransform()
     print('dst UL: ({}, {})'.format(
-        gt[0] + gt[1] * (i + 0.5),
-        gt[3] + gt[5] * (j + 0.5),
+        gt[0] + gt[1] * i,
+        gt[3] + gt[5] * j,
     ))
     i = dst_data.shape[1] - 1
     j = dst_data.shape[0] - 1
     print('dst LR: ({}, {})'.format(
-        gt[0] + gt[1] * (i + 0.5),
-        gt[3] + gt[5] * (j + 0.5),
+        gt[0] + gt[1] * i,
+        gt[3] + gt[5] * j,
     ))
+    dst_data.tofile('test_dst_data.dat')
 
 
     return geogrid_in
