@@ -462,200 +462,40 @@ def reproject_GeoGrid(geogrid_in, srs_string,
     """Reproject geogrid_in onto srs_out"""
     src = geogrid_as_gdalInMem(geogrid_in)
 
-    in_wkt = geogrid_in.wkt
     out_srs = osr.SpatialReference()
     assign_projection_to_srs(out_srs, srs_string)
     out_wkt = out_srs.ExportToWkt()
 
+    dst_gdal_datatype = get_gdal_datatype(geogrid_in.data_array.dtype)
+    print('dst_gdal_datatype: {}'.format(dst_gdal_datatype))
+
+    try:
+        dst = gdal.GetDriverByName('MEM').Create(
+                '',
+                out_xdim,
+                out_ydim,
+                1,
+                dst_gdal_datatype,
+        )
+        dst.SetGeoTransform(out_geotransform)
+        dst.SetProjection(out_wkt)
+    except ValueError:
+        raise ValueError('Error creating dst in reproject_GeoGrid()')
+    except AttributeError:
+        raise ValueError('AttributeError in dst creation')
+
+
     gdal_interp_method = getGdalInterpMethod(interp_method)
-
-    # Autodetection of transform coords is not supported yet:
-    if out_xdim is None or \
-       out_ydim is None or \
-       out_geotransform is None:
-        raise ValueError(
-            'Currently need to specify out_xdim, out_ydim, out_geotransform')
-
-    if out_nodata_value is None:
-        try:
-            out_nodata_value = geogrid_in.NoDataValue()
-        except AttributeError:
-            out_nodata_value = np.nan
-
-    src_array_dtype = geogrid_in.data_array.dtype
-
-    if src_array_dtype == 'float64':
-        src_datatype = gdalconst.GDT_Float64
-    elif src_array_dtype == 'float32':
-        src_datatype = gdalconst.GDT_Float32
-    elif src_array_dtype == 'int32':
-        src_datatype = gdalconst.GDT_Int32
-    else:
-        raise ValueError('Could not determine src_datatype:\n{}'.format(
-            src_array_dtype))
-
-
-    src_wkt = geogrid_in.wkt
-    dst_wkt = src_wkt
-
-    src_geotransform = geogrid_in.geotransform
-    dst_geotransform = geogrid_in.geotransform
-
-    # I think life will just be easier if we only work in Float32....
-    dst_datatype = gdalconst.GDT_Float32
-
-    src = gdal.GetDriverByName('MEM').Create(
-        '', geogrid_in.xdim, geogrid_in.ydim, 1, src_datatype)
-
-    dst = gdal.GetDriverByName('MEM').Create(
-        '', out_xdim, out_ydim, 1, dst_datatype)
-
-    print('dst init RasterXSize: {}'.format(dst.RasterXSize))
-    print('dst init RasterYSize: {}'.format(dst.RasterYSize))
-
-    src.SetGeoTransform(src_geotransform)
-    src.SetProjection(geogrid_in.wkt)
-
-    dst.SetGeoTransform(out_geotransform)
-    dst.SetProjection(out_srs.ExportToWkt())
-    #dst.SetGeoTransform(src_geotransform)
-    #dst.SetProjection(geogrid_in.srs.ExportToWkt())
-
-    src_raster = src.GetRasterBand(1)
-    #src_raster.SetNoDataValue(out_nodata_value)
-    src_raster.WriteArray(geogrid_in.data_array)
-
-    print('src_raster:')
-    print(src_raster.ReadAsArray()[:])
-
-    #dst_raster.SetNoDataValue(out_nodata_value)
-
-    print('\nOverwriting the dst values...')
-    dst.SetProjection(geogrid_in.wkt)
-    #dst.SetGeoTransform((-163.0, 0.05, 0.0, 64.25, 0.0, -0.025))
-
-    latlon_srs = osr.SpatialReference()
-    latlon_srs.ImportFromEPSG(4326)
-
-    psn_srs = osr.SpatialReference()
-    psn_srs.ImportFromEPSG(3411)
-    #print('latlon_aswkt: {}'.format(latlon_srs.ExportToWkt()))
-
-    src.SetProjection(latlon_srs.ExportToWkt())
-    dst.SetProjection(psn_srs.ExportToWkt())
-
-    print('src geotransform: {}'.format(src.GetGeoTransform()))
-    print('dst geotransform: {}'.format(dst.GetGeoTransform()))
-
-    print('in_srs: {}'.format(src.GetProjection()))
-    print('geogrid_in.wkt: {}'.format(geogrid_in.wkt))
-    print('geogrid_in.wkt == '': {}'.format(geogrid_in.wkt == ''))
-    print('geogrid_in.wkt: {}'.format(repr(geogrid_in.wkt)))
-
-    print('dst.GetProj: {}'.format(dst.GetProjection()))
-    print('because: {}'.format(geogrid_in.wkt))
-
-    print('about to reproject')
     res = gdal.ReprojectImage(src,
                         dst,
                         src.GetProjection(),
                         dst.GetProjection(),
-                        gdal.GRA_Max,
+                        gdal_interp_method,
                        )
-    print(' ')
-    print('res: {}'.format(res))
-    #gdal.ReprojectImage(src,
-    #                    dst,
-    #                    src.GetProjection(),
-    #                    dst.GetProjection(),
-    #                    gdal.GRA_NearestNeighbour,
-    #                   )
-
-    src_data = src.GetRasterBand(1).ReadAsArray()
-    print(' ')
-    print('src geotransform: {}'.format(src.GetGeoTransform()))
-    print('src data shape: {}'.format(src_data.shape))
-    print('src datatype: {}'.format(src_data.dtype))
-    print('src data min: {}'.format(src_data.min()))
-    print('src data max: {}'.format(src_data.max()))
-    i = 0
-    j = 0
-    gt = src.GetGeoTransform()
-    print('src UL: ({}, {})'.format(
-        gt[0] + gt[1] * i,
-        gt[3] + gt[5] * j,
-    ))
-    i = src_data.shape[1] - 1
-    j = src_data.shape[0] - 1
-    print('src LR: ({}, {})'.format(
-        gt[0] + gt[1] * i,
-        gt[3] + gt[5] * j,
-    ))
-
-    print(' ')
-    dst_data = dst.GetRasterBand(1).ReadAsArray()
-    print('dst geotransform: {}'.format(dst.GetGeoTransform()))
-    print('dst data shape: {}'.format(dst_data.shape))
-    print('dst datatype: {}'.format(dst_data.dtype))
-    print('dst data min: {}'.format(dst_data.min()))
-    print('dst data max: {}'.format(dst_data.max()))
-
-    gt = dst.GetGeoTransform()
-    print('dst UL: ({}, {})'.format(
-        gt[0] + gt[1] * i,
-        gt[3] + gt[5] * j,
-    ))
-    i = dst_data.shape[1] - 1
-    j = dst_data.shape[0] - 1
-    print('dst LR: ({}, {})'.format(
-        gt[0] + gt[1] * i,
-        gt[3] + gt[5] * j,
-    ))
-    dst_data.tofile('test_dst_data.dat')
 
 
-    return geogrid_in
-    """
-    dst_raster = dst.GetRasterBand(1)
+    return geogrid_from_gdalInMem(dst)
 
-    #gdal.warpImage(src,
-    #                    dst,
-    #                    geogrid_in.srs.ExportToWkt(),
-    #                    out_srs.ExportToWkt(),
-    #                    interp_method)
-
-    print('done with warp')
-    print('dst_raster:')
-    print(dst_raster.ReadAsArray()[:])
-
-    # Now, create a GeoGrid object from the remainder...
-    print('out_xdim: {}'.format(out_xdim))
-    print('out_ydim: {}'.format(out_ydim))
-    print('out_geot: {}'.format(out_geotransform))
-    print('RasterXSize: {}'.format(dst.RasterXSize))
-    print('RasterYSize: {}'.format(dst.RasterYSize))
-
-    xvals = np.linspace(
-        out_geotransform[0] + 0.5 * out_geotransform[1],
-        out_geotransform[0] + (out_xdim - 0.5) * out_geotransform[1],
-        out_xdim)
-    yvals = np.linspace(
-        out_geotransform[3] + 0.5 * out_geotransform[5],
-        out_geotransform[3] + (out_ydim - 0.5) * out_geotransform[5],
-        out_ydim)
-    data_array = dst_raster.ReadAsArray()
-    print('dst array shape: {}'.format(data_array.shape))
-    print('dst geotransform: {}'.format(dst.GetGeoTransform()))
-    print('src array min: {}'.format(geogrid_in.data_array.min()))
-    print('src array max: {}'.format(geogrid_in.data_array.max()))
-    print('dst array min: {}'.format(data_array.min()))
-    print('dst array max: {}'.format(data_array.max()))
-
-    print(xvals)
-
-    return_gg = GeoGrid(data_array, xvals, yvals, out_srs.ExportToWkt())
-    return return_gg
-    """
 
 
 """

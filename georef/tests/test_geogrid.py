@@ -295,7 +295,8 @@ def test_reproject_geogrid():
     gg_reproj = georef.geogrid.reproject_GeoGrid(
         gg, out_epsg, out_xdim, out_ydim, out_geotransform)
 
-    #gg_reproj.saveAsGeotiff('test_reproj.tif')
+    assert gg_reproj.isComplete()
+    gg_reproj.saveAsGeotiff('test_reproj.tif')
 
     """
     gg2 = gg_reproj
