@@ -55,6 +55,12 @@ def get_gdal_datatype(in_datatype):
         return gdalconst.GDT_Float64
     elif in_datatype == 'float32':
         return gdalconst.GDT_Float32
+    elif in_datatype == 'int32':
+        return gdalconst.GDT_Int32
+    else:
+        raise ValueError(
+            'Unrecognized data type in get_gdal_datatype():\n  {}'.format(
+                in_datatype))
 
 
 class GeoGrid(object):
@@ -155,20 +161,23 @@ class GeoGrid(object):
         """Return the 'geotransform' equivalent of the coordinates"""
         return self._geotransform
 
-    def saveAsGeotiff(self, geotiff_fname, overwrite=True):
+    def saveAsGeotiff(self, geotiff_fname, overwrite=True, verbose=False):
         """Save the GeoGrid as a geotiff with the given fname"""
+        if not overwrite and os.path.exists(geotiff_fname):
+            raise ValueError('output geotiff already exists:\n  {}'.format(
+                geotiff_fname))
 
         # Note: Geotiffs can't be 64-bit floats
         src_datatype = get_gdal_datatype(self._data_array.dtype)
         if src_datatype == gdalconst.GDT_Float64:
+            if verbose:
+                print('  converting data from Float64 to Float32')
             src_datatype = gdalconst.GDT_Float32
-
-        # Note: can't save geotiff as 64-bit float
-        if src_datatype == gdalconst.GDT_Float64:
-            dst_datatype = gdalconst.GDT_Float32
+            local_data_array = self._data_array.astype(np.float32)
         else:
-            dst_datatype = src_datatype
+            local_data_array = self._data_array
 
+        # Encode the source as a Geotiff
         src = gdal.GetDriverByName('Gtiff').Create(
             geotiff_fname,
             len(self._x),
@@ -177,18 +186,16 @@ class GeoGrid(object):
             src_datatype)
 
         src.SetGeoTransform(self._geotransform)
-        src.SetProjection(self._srs.ExportToWkt())
+        src.SetProjection(self.srs.ExportToWkt())
 
         src_raster = src.GetRasterBand(1)
         if self._NoDataValue is not None:
             src_raster.SetNoDataValue(self._NoDataValue)
 
-        if self._data_array.dtype == 'float64':
-            src_raster.WriteArray(self._data_array.astype(np.float32))
-        else:
-            src_raster.WriteArray(self._data_array)
-
+        src_raster.WriteArray(local_data_array)
         src_raster.FlushCache()
+
+        src_raster = None
 
 
 def remove_quotes(fname_string):
@@ -359,10 +366,10 @@ def get_specific_nc_timeindex(fname,
     return nearest_index
 
 
-def reproject_GeoGrid(geogrid_in, srs_string,
+def warp_GeoGrid(geogrid_in, srs_string,
                      out_xdim=None, out_ydim=None, out_geotransform=None,
                      out_nodata_value=None, interp_method=None):
-    """Reproject geogrid_in onto srs_out"""
+    """warp geogrid_in onto srs_out"""
     in_srs = geogrid_in.srs
     out_srs = osr.SpatialReference()
     assign_projection_to_srs(out_srs, srs_string)
@@ -410,22 +417,29 @@ def reproject_GeoGrid(geogrid_in, srs_string,
 
     if src_array_dtype == 'float64':
         src_datatype = gdalconst.GDT_Float64
+    elif src_array_dtype == 'int32':
+        src_datatype = gdalconst.GDT_Int32
     else:
-        raise ValueError('Could not determine src_datatype')
+        raise ValueError('Could not determine src_datatype:\n{}'.format(
+            src_array_dtype))
 
 
     src_srs = geogrid_in.srs
-    dst_srs = out_srs
+    #dst_srs = out_srs
+    dst_srs = src_srs
 
     src_geotransform = geogrid_in.geotransform
+    dst_geotransform = geogrid_in.geotransform
 
-    dst_datatype = src_datatype
+    # I think life will just be easier if we only work in Float32....
+    dst_datatype = gdalconst.GDT_Float32
 
     src = gdal.GetDriverByName('MEM').Create(
         '', geogrid_in.xdim, geogrid_in.ydim, 1, src_datatype)
 
     dst = gdal.GetDriverByName('MEM').Create(
         '', out_xdim, out_ydim, 1, dst_datatype)
+
     print('dst init RasterXSize: {}'.format(dst.RasterXSize))
     print('dst init RasterYSize: {}'.format(dst.RasterYSize))
 
@@ -434,24 +448,35 @@ def reproject_GeoGrid(geogrid_in, srs_string,
 
     dst.SetGeoTransform(out_geotransform)
     dst.SetProjection(out_srs.ExportToWkt())
+    #dst.SetGeoTransform(src_geotransform)
+    #dst.SetProjection(geogrid_in.srs.ExportToWkt())
 
     src_raster = src.GetRasterBand(1)
     src_raster.SetNoDataValue(out_nodata_value)
     src_raster.WriteArray(geogrid_in.data_array)
 
+    print('src_raster:')
+    print(src_raster.ReadAsArray()[:])
+
     dst_raster = dst.GetRasterBand(1)
     dst_raster.SetNoDataValue(out_nodata_value)
 
-    print('src geotransform: {}'.format(src_geotransform))
-    print('dst geotransform: {}'.format(out_geotransform))
+    print('src geotransform: {}'.format(src.GetGeoTransform()))
+    print('dst geotransform: {}'.format(dst.GetGeoTransform()))
 
-    print('about to reproject')
-    gdal.ReprojectImage(src,
-                        dst,
-                        geogrid_in.srs.ExportToWkt(),
-                        out_srs.ExportToWkt(),
-                        interp_method)
-    print('done with reproject')
+    print('out_srs: {}'.format(out_srs.ExportToWkt()))
+    print('about to warp')
+    gdal.Warp(dst, src)
+
+    #gdal.warpImage(src,
+    #                    dst,
+    #                    geogrid_in.srs.ExportToWkt(),
+    #                    out_srs.ExportToWkt(),
+    #                    interp_method)
+
+    print('done with warp')
+    print('dst_raster:')
+    print(dst_raster.ReadAsArray()[:])
 
     # Now, create a GeoGrid object from the remainder...
     print('out_xdim: {}'.format(out_xdim))
@@ -478,7 +503,8 @@ def reproject_GeoGrid(geogrid_in, srs_string,
 
     print(xvals)
 
-    return GeoGrid(data_array, xvals, yvals, out_srs.ExportToWkt())
+    return_gg = GeoGrid(data_array, xvals, yvals, out_srs.ExportToWkt())
+    return return_gg
 
 
 """
