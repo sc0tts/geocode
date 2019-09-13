@@ -8,7 +8,6 @@ from osgeo import osr
 import gdal
 import gdalconst
 import numpy as np
-from pprint import pprint
 import netCDF4
 import datetime
 
@@ -20,7 +19,6 @@ def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
     try:
         if srs.ExportToWkt() == "" and \
            isinstance(projdef, int):
-            print(' in 1')
             srs.ImportFromEPSG(projdef)
     except TypeError:
         if verbose:
@@ -30,7 +28,6 @@ def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
         if srs.ExportToWkt() == "" and \
            isinstance(projdef, str) and \
            ('PROJ' in projdef or 'GEOGCS' in projdef):
-            print(' in 2')
             srs.ImportFromWkt(projdef)
     except TypeError:
         if verbose:
@@ -40,14 +37,11 @@ def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
         if srs.ExportToWkt() == "" and \
            isinstance(projdef, str) and \
            '+proj' in projdef:
-            print(' in 3')
             srs.ImportFromProj4(projdef)
     except TypeError:
         if verbose:
             print('Ignoring TypeError when importing from Proj4')
 
-    print('in assign_projection...')
-    print('projdef:\n  {}'.format(projdef))
     if warn:
         if srs.ExportToWkt() == "":
             if verbose:
@@ -79,8 +73,6 @@ class GeoGrid(object):
         if proj_definition is not None:
             assign_projection_to_srs(self._srs, proj_definition,
                                      verbose=verbose, warn=warn)
-            print('Created _srs with WKT:\n  {}'.format(
-                self._srs.ExportToWkt()))
 
         if warn:
             if self._srs.ExportToWkt() == "":
@@ -180,17 +172,6 @@ class GeoGrid(object):
 
         gggdal = geogrid_as_gdalInMem(self)
 
-        """
-        # Note: Geotiffs can't be 64-bit floats
-        src_datatype = get_gdal_datatype(self._data_array.dtype)
-        if src_datatype == gdalconst.GDT_Float64:
-            if verbose:
-                print('  converting data from Float64 to Float32')
-            src_datatype = gdalconst.GDT_Float32
-            local_data_array = self._data_array.astype(np.float32)
-        else:
-            local_data_array = self._data_array
-        """
         dst = gdal.GetDriverByName('GTiff').CreateCopy(
             geotiff_fname, gggdal)
         dst = None
@@ -338,9 +319,8 @@ def get_nc_timevalues(fname, time_varname='time'):
     try:
         assert nc_fid.variables[time_varname] is not None
     except AssertionError:
-        print('nc file does not have variable/dimension: {}'.format(
-                  time_varname))
-        raise ValueError('time variable not found')
+        raise ValueError('nc file does not have variable/dimension: {}'
+                         .format(time_varname))
 
     nc_time_values = nc_fid.variables[time_varname]
     time_values = netCDF4.num2date(nc_time_values[:],
@@ -467,7 +447,6 @@ def reproject_GeoGrid(geogrid_in, srs_string,
     out_wkt = out_srs.ExportToWkt()
 
     dst_gdal_datatype = get_gdal_datatype(geogrid_in.data_array.dtype)
-    print('dst_gdal_datatype: {}'.format(dst_gdal_datatype))
 
     try:
         dst = gdal.GetDriverByName('MEM').Create(
@@ -495,36 +474,3 @@ def reproject_GeoGrid(geogrid_in, srs_string,
 
 
     return geogrid_from_gdalInMem(dst)
-
-
-
-"""
-Reference section
-
-Typeical Python object dir() of a dimension in a georeferenced nc dataset:
-
-
-    time_values = nc_fid.variables[time_varname]
-    dir(time_values)
-
-    ['__array__', '__class__', '__delattr__', '__delitem__', '__dir__',
-    '__doc__', '__eq__', '__format__', '__ge__', '__getattr__',
-    '__getattribute__', '__getitem__', '__gt__', '__hash__', '__init__',
-    '__init_subclass__', '__le__', '__len__', '__lt__', '__ne__', '__new__',
-    '__orthogonal_indexing__', '__reduce__', '__reduce_ex__', '__repr__',
-    '__setattr__', '__setitem__', '__sizeof__', '__str__', '__subclasshook__',
-    '__unicode__', '_assign_vlen', '_check_safecast', '_cmptype', '_enumtype',
-    '_get', '_getdims', '_getname', '_grp', '_grpid', '_has_lsd',
-    '_iscompound', '_isenum', '_isprimitive', '_isvlen', '_name',
-    '_ncstring_attrs__', '_nunlimdim', '_put', '_toma', '_use_get_vars',
-    '_varid', '_vltype', 'always_mask', 'assignValue', 'axis', 'calendar',
-    'chartostring', 'chunking', 'datatype', 'delncattr', 'dimensions', 'dtype',
-    'endian', 'filters', 'getValue', 'get_dims', 'get_var_chunk_cache',
-    'getncattr', 'group', 'mask', 'name', 'ncattrs', 'ndim', 'renameAttribute',
-    'scale', 'set_always_mask', 'set_auto_chartostring', 'set_auto_mask',
-    'set_auto_maskandscale', 'set_auto_scale', 'set_collective',
-    'set_ncstring_attrs', 'set_var_chunk_cache', 'setncattr',
-    'setncattr_string', 'setncatts', 'shape', 'size', 'standard_name', 'units',
-    'use_nc_get_vars']
-
-"""

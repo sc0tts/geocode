@@ -264,7 +264,6 @@ def test_bad_projdef_yields_Warningo():
 def test_geogrid_to_VRT():
     """Test that we can create a valid in-memory GDAL model from geogrid"""
     dvals, xvals, yvals, wkt = simple_GeoGrid_values()
-    print('wkt: {}'.format(wkt))
     gg = georef.GeoGrid(dvals.astype(np.float32), xvals, yvals, wkt, warn=True)
     assert gg.isComplete()
 
@@ -279,50 +278,23 @@ def test_reproject_geogrid():
     dvals, xvals, yvals, wkt = simple_GeoGrid_values()
     gg = georef.GeoGrid(dvals.astype(np.float32), xvals, yvals, wkt)
 
-    print('in_geotransform:\n  {}'.format(gg.geotransform))
     gg.saveAsGeotiff('test_gg_preproj.tif')
 
     # Reprojection parameters
     out_xdim = 100
     out_ydim = 100
 
-    out_epsg = 4326
-    out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
+    #out_epsg = 4326
+    #out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
 
-    #out_epsg = 3411
-    #out_geotransform = (-2737500.0, 2000.0, 0.0, 1412500.0, 0.0, -2000.0)
+    out_epsg = 3411
+    out_geotransform = (-2737500.0, 2000.0, 0.0, 1412500.0, 0.0, -2000.0)
 
     gg_reproj = georef.geogrid.reproject_GeoGrid(
         gg, out_epsg, out_xdim, out_ydim, out_geotransform)
 
     assert gg_reproj.isComplete()
     gg_reproj.saveAsGeotiff('test_reproj.tif')
-
-    """
-    gg2 = gg_reproj
-    #print('gg2.x:\n  {}'.format(gg2.x))
-    #print('gg2.y:\n  {}'.format(gg2.y))
-    print('gg2.data:\n  {}'.format(gg2.data_array))
-    print('gg2.min:\n  {}'.format(gg2.data_array.min()))
-    print('gg2.max:\n  {}'.format(gg2.data_array.max()))
-    print('gg2.geotransform:  {}'.format(gg2.geotransform))
-    print('gg2.xdim:  {}'.format(gg2.xdim))
-    print('gg2.ydim:  {}'.format(gg2.ydim))
-    print('right edge x: {}'.format(
-        gg2.x[0] + (gg2.xdim - 0.5) * gg2.geotransform[1]))
-    print('bottom edge y: {}'.format(
-        gg2.y[0] + (gg2.ydim - 0.5) * gg2.geotransform[5]))
-    gg_reproj.saveAsGeotiff('test_gg_reproj.tif')
-    """
-
-    """
-    print('out_xdim: {}'.format(out_xdim))
-    print('out_ydim: {}'.format(out_ydim))
-    print('gg_reproj xdim: {}'.format(len(gg_reproj.x)))
-    print('gg_reproj ydim: {}'.format(len(gg_reproj.y)))
-
-    print('reprojed array:\n  {}'.format(gg_reproj.data_array))
-    """
 
 
 '''
