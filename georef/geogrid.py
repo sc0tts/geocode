@@ -3,6 +3,7 @@ geogrid.py
 
 Provicdes GeoGrid class
 """
+import os
 from osgeo import osr
 import gdal
 import gdalconst
@@ -167,6 +168,12 @@ class GeoGrid(object):
             raise ValueError('output geotiff already exists:\n  {}'.format(
                 geotiff_fname))
 
+        if overwrite and os.path.exists(geotiff_fname):
+            os.remove(geotiff_fname)
+
+        gggdal = geogrid_as_gdalInMem(self)
+
+        """
         # Note: Geotiffs can't be 64-bit floats
         src_datatype = get_gdal_datatype(self._data_array.dtype)
         if src_datatype == gdalconst.GDT_Float64:
@@ -176,26 +183,28 @@ class GeoGrid(object):
             local_data_array = self._data_array.astype(np.float32)
         else:
             local_data_array = self._data_array
+        """
+        dst = gdal.GetDriverByName('GTiff').CreateCopy(
+            geotiff_fname, gggdal)
+        dst = None
 
-        # Encode the source as a Geotiff
-        src = gdal.GetDriverByName('Gtiff').Create(
-            geotiff_fname,
-            len(self._x),
-            len(self._y),
-            1,
-            src_datatype)
 
-        src.SetGeoTransform(self._geotransform)
-        src.SetProjection(self.srs.ExportToWkt())
+def geogrid_as_gdalInMem(gg):
+    """Convert GeoGrid to gdal in-memory dataset"""
+    in_xdim = len(gg.x)
+    in_ydim = len(gg.y)
+    in_datatype = get_gdal_datatype(gg.data_array.dtype)
+    in_geotransform = gg.geotransform
+    in_srs = gg.srs
+    in_data = gg.data_array
 
-        src_raster = src.GetRasterBand(1)
-        if self._NoDataValue is not None:
-            src_raster.SetNoDataValue(self._NoDataValue)
+    ds = gdal.GetDriverByName('MEM').Create(
+        '', in_xdim, in_ydim, 1, in_datatype)
+    ds.SetProjection(in_srs.ExportToWkt())
+    ds.SetGeoTransform(in_geotransform)
+    ds.GetRasterBand(1).WriteArray(in_data)
 
-        src_raster.WriteArray(local_data_array)
-        src_raster.FlushCache()
-
-        src_raster = None
+    return ds
 
 
 def remove_quotes(fname_string):
@@ -366,10 +375,10 @@ def get_specific_nc_timeindex(fname,
     return nearest_index
 
 
-def warp_GeoGrid(geogrid_in, srs_string,
+def reproject_GeoGrid(geogrid_in, srs_string,
                      out_xdim=None, out_ydim=None, out_geotransform=None,
                      out_nodata_value=None, interp_method=None):
-    """warp geogrid_in onto srs_out"""
+    """Reproject geogrid_in onto srs_out"""
     in_srs = geogrid_in.srs
     out_srs = osr.SpatialReference()
     assign_projection_to_srs(out_srs, srs_string)
@@ -417,6 +426,8 @@ def warp_GeoGrid(geogrid_in, srs_string,
 
     if src_array_dtype == 'float64':
         src_datatype = gdalconst.GDT_Float64
+    elif src_array_dtype == 'float32':
+        src_datatype = gdalconst.GDT_Float32
     elif src_array_dtype == 'int32':
         src_datatype = gdalconst.GDT_Int32
     else:
@@ -452,21 +463,69 @@ def warp_GeoGrid(geogrid_in, srs_string,
     #dst.SetProjection(geogrid_in.srs.ExportToWkt())
 
     src_raster = src.GetRasterBand(1)
-    src_raster.SetNoDataValue(out_nodata_value)
+    #src_raster.SetNoDataValue(out_nodata_value)
     src_raster.WriteArray(geogrid_in.data_array)
 
     print('src_raster:')
     print(src_raster.ReadAsArray()[:])
 
-    dst_raster = dst.GetRasterBand(1)
-    dst_raster.SetNoDataValue(out_nodata_value)
+    #dst_raster.SetNoDataValue(out_nodata_value)
 
     print('src geotransform: {}'.format(src.GetGeoTransform()))
     print('dst geotransform: {}'.format(dst.GetGeoTransform()))
 
     print('out_srs: {}'.format(out_srs.ExportToWkt()))
-    print('about to warp')
-    gdal.Warp(dst, src)
+    print('about to reproject')
+    gdal.ReprojectImage(src,
+                        dst,
+                        src.GetProjection(),
+                        dst.GetProjection(),
+                        gdal.GRA_NearestNeighbour,
+                       )
+
+    src_data = src.GetRasterBand(1).ReadAsArray()
+    print(' ')
+    print('src data shape: {}'.format(src_data.shape))
+    print('src datatype: {}'.format(src_data.dtype))
+    print('src data min: {}'.format(src_data.min()))
+    print('src data max: {}'.format(src_data.max()))
+    i = 0
+    j = 0
+    gt = src.GetGeoTransform()
+    print('src UL: ({}, {})'.format(
+        gt[0] + gt[1] * (i + 0.5),
+        gt[3] + gt[5] * (j + 0.5),
+    ))
+    i = src_data.shape[1] - 1
+    j = src_data.shape[0] - 1
+    print('src LR: ({}, {})'.format(
+        gt[0] + gt[1] * (i + 0.5),
+        gt[3] + gt[5] * (j + 0.5),
+    ))
+
+    print(' ')
+    dst_data = dst.GetRasterBand(1).ReadAsArray()
+    print('dst data shape: {}'.format(dst_data.shape))
+    print('dst datatype: {}'.format(dst_data.dtype))
+    print('dst data min: {}'.format(dst_data.min()))
+    print('dst data max: {}'.format(dst_data.max()))
+
+    gt = dst.GetGeoTransform()
+    print('dst UL: ({}, {})'.format(
+        gt[0] + gt[1] * (i + 0.5),
+        gt[3] + gt[5] * (j + 0.5),
+    ))
+    i = dst_data.shape[1] - 1
+    j = dst_data.shape[0] - 1
+    print('dst LR: ({}, {})'.format(
+        gt[0] + gt[1] * (i + 0.5),
+        gt[3] + gt[5] * (j + 0.5),
+    ))
+
+
+    return geogrid_in
+    """
+    dst_raster = dst.GetRasterBand(1)
 
     #gdal.warpImage(src,
     #                    dst,
@@ -505,6 +564,7 @@ def warp_GeoGrid(geogrid_in, srs_string,
 
     return_gg = GeoGrid(data_array, xvals, yvals, out_srs.ExportToWkt())
     return return_gg
+    """
 
 
 """

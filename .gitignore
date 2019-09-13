@@ -12,6 +12,8 @@ __pycache__/
 pymt_example_grid.py
 local/
 test_geotiff.tif
+old/
+*.tif
 
 # Frequent data or analysis files
 out*

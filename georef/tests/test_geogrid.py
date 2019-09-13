@@ -254,13 +254,13 @@ def test_bad_projdef_yields_Warningo():
 def test_warp_geogrid():
     """Test that we can warp a geogrid"""
     dvals, xvals, yvals, wkt = simple_GeoGrid_values()
-    gg = georef.GeoGrid(dvals, xvals, yvals, wkt)
+    #gg = georef.GeoGrid(dvals, xvals, yvals, wkt)
+    gg = georef.GeoGrid(dvals.astype(np.float32), xvals, yvals, wkt)
 
     print('in_geotransform:\n  {}'.format(gg.geotransform))
     gg.saveAsGeotiff('test_gg_preproj.tif')
 
-    print('gg.x:\n  {}'.format(gg.x))
-    print('gg.y:\n  {}'.format(gg.y))
+    """
     print('gg.data:\n  {}'.format(gg.data_array))
     print('gg.geotransform:  {}'.format(gg.geotransform))
     print('gg.xdim:  {}'.format(gg.xdim))
@@ -269,22 +269,26 @@ def test_warp_geogrid():
         gg.x[0] + (gg.xdim - 0.5) * gg.geotransform[1]))
     print('bottom edge y: {}'.format(
         gg.y[0] + (gg.ydim - 0.5) * gg.geotransform[5]))
+    """
 
     # Reprojection parameters
     out_xdim = 100
     out_ydim = 100
-    out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
-    out_epsg = 4326
-    #out_geotransform = (63., -0.05, 0.0, 60.0, 0.0, 0.05)
-    # to -158  60
-    # 100 in 5 deg is .05 per
 
-    gg_reproj = georef.geogrid.warp_GeoGrid(
+    #out_epsg = 4326
+    #out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
+
+    out_epsg = 3411
+    out_geotransform = (-2737500.0, 2000.0, 0.0, 1412500.0, 0.0, -2000.0)
+
+    gg_reproj = georef.geogrid.reproject_GeoGrid(
         gg, out_epsg, out_xdim, out_ydim, out_geotransform)
+    gg_reproj.saveAsGeotiff('test_reproj.tif')
 
+    """
     gg2 = gg_reproj
-    print('gg2.x:\n  {}'.format(gg2.x))
-    print('gg2.y:\n  {}'.format(gg2.y))
+    #print('gg2.x:\n  {}'.format(gg2.x))
+    #print('gg2.y:\n  {}'.format(gg2.y))
     print('gg2.data:\n  {}'.format(gg2.data_array))
     print('gg2.min:\n  {}'.format(gg2.data_array.min()))
     print('gg2.max:\n  {}'.format(gg2.data_array.max()))
@@ -296,6 +300,7 @@ def test_warp_geogrid():
     print('bottom edge y: {}'.format(
         gg2.y[0] + (gg2.ydim - 0.5) * gg2.geotransform[5]))
     gg_reproj.saveAsGeotiff('test_gg_reproj.tif')
+    """
 
     """
     print('out_xdim: {}'.format(out_xdim))
