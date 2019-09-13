@@ -51,7 +51,6 @@ def assign_projection_to_srs(srs, projdef, verbose=False, warn=True):
 
 def get_gdal_datatype(in_datatype):
     """Returns the GDAL data type for this data type"""
-    print('in_datatype: {}'.format(in_datatype))
     if in_datatype == 'float64':
         return gdalconst.GDT_Float64
     elif in_datatype == 'float32':
@@ -156,8 +155,9 @@ class GeoGrid(object):
         """Return the 'geotransform' equivalent of the coordinates"""
         return self._geotransform
 
-    def saveAsGeotiff(self, geotiff_fname):
+    def saveAsGeotiff(self, geotiff_fname, overwrite=True):
         """Save the GeoGrid as a geotiff with the given fname"""
+
         # Note: Geotiffs can't be 64-bit floats
         src_datatype = get_gdal_datatype(self._data_array.dtype)
         if src_datatype == gdalconst.GDT_Float64:
@@ -367,7 +367,6 @@ def reproject_GeoGrid(geogrid_in, srs_string,
     out_srs = osr.SpatialReference()
     assign_projection_to_srs(out_srs, srs_string)
 
-
     if interp_method is None:
         """
         I think the options are:
@@ -427,6 +426,8 @@ def reproject_GeoGrid(geogrid_in, srs_string,
 
     dst = gdal.GetDriverByName('MEM').Create(
         '', out_xdim, out_ydim, 1, dst_datatype)
+    print('dst init RasterXSize: {}'.format(dst.RasterXSize))
+    print('dst init RasterYSize: {}'.format(dst.RasterYSize))
 
     src.SetGeoTransform(src_geotransform)
     src.SetProjection(geogrid_in.srs.ExportToWkt())
@@ -438,14 +439,46 @@ def reproject_GeoGrid(geogrid_in, srs_string,
     src_raster.SetNoDataValue(out_nodata_value)
     src_raster.WriteArray(geogrid_in.data_array)
 
-    dst_raster = src.GetRasterBand(1)
+    dst_raster = dst.GetRasterBand(1)
     dst_raster.SetNoDataValue(out_nodata_value)
 
+    print('src geotransform: {}'.format(src_geotransform))
+    print('dst geotransform: {}'.format(out_geotransform))
+
+    print('about to reproject')
     gdal.ReprojectImage(src,
                         dst,
                         geogrid_in.srs.ExportToWkt(),
                         out_srs.ExportToWkt(),
                         interp_method)
+    print('done with reproject')
+
+    # Now, create a GeoGrid object from the remainder...
+    print('out_xdim: {}'.format(out_xdim))
+    print('out_ydim: {}'.format(out_ydim))
+    print('out_geot: {}'.format(out_geotransform))
+    print('RasterXSize: {}'.format(dst.RasterXSize))
+    print('RasterYSize: {}'.format(dst.RasterYSize))
+
+    xvals = np.linspace(
+        out_geotransform[0] + 0.5 * out_geotransform[1],
+        out_geotransform[0] + (out_xdim - 0.5) * out_geotransform[1],
+        out_xdim)
+    yvals = np.linspace(
+        out_geotransform[3] + 0.5 * out_geotransform[5],
+        out_geotransform[3] + (out_ydim - 0.5) * out_geotransform[5],
+        out_ydim)
+    data_array = dst_raster.ReadAsArray()
+    print('dst array shape: {}'.format(data_array.shape))
+    print('dst geotransform: {}'.format(dst.GetGeoTransform()))
+    print('src array min: {}'.format(geogrid_in.data_array.min()))
+    print('src array max: {}'.format(geogrid_in.data_array.max()))
+    print('dst array min: {}'.format(data_array.min()))
+    print('dst array max: {}'.format(data_array.max()))
+
+    print(xvals)
+
+    return GeoGrid(data_array, xvals, yvals, out_srs.ExportToWkt())
 
 
 """

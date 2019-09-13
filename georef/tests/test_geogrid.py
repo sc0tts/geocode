@@ -11,6 +11,7 @@ import georef
 import numpy as np
 import netCDF4
 import datetime
+import osr
 
 
 epsg_3411_as_wkt = """
@@ -55,11 +56,34 @@ def simple_GeoGrid_values():
     """Returns a simple set of values that can initialize a GeoGrid"""
     xdim = 3
     ydim = 4
-    data_values = np.arange(12.).reshape((ydim, xdim))
-    x_values = np.arange(xdim)
-    y_values = np.arange(ydim)
 
-    return data_values, x_values, y_values
+    #x0 = -160
+    #dx = 1
+
+    #y0 = 63
+    #dy = -1
+
+    x0 = 63
+    dx = -1
+
+    y0 = -160
+    dy = 1
+
+    data_values = np.arange(12.).reshape((ydim, xdim))
+    x_values = np.linspace(
+        x0 + 0.5 * dx,
+        x0 + (xdim - 0.5) * dx,
+        xdim)
+    y_values = np.linspace(
+        y0 + 0.5 * dy,
+        y0 + (ydim - 0.5) * dy,
+        ydim)
+
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+    wkt = srs.ExportToWkt()
+
+    return data_values, x_values, y_values, wkt
 
 
 def test_can_declare_GeoGrid():
@@ -198,7 +222,7 @@ def test_find_specific_nc_time_index():
 def test_bad_projdef_yields_Warningo():
     """Test that a bad projdef raises a Warning"""
     try:
-        dvals, xvals, yvals = simple_GeoGrid_values()
+        dvals, xvals, yvals, wkt = simple_GeoGrid_values()
         gg = georef.GeoGrid(dvals, xvals, yvals, 'non-proj4_string',
                            warn=True)
     except Warning:
@@ -209,21 +233,40 @@ def test_bad_projdef_yields_Warningo():
 
 def test_reproject_geogrid():
     """Test that we can reproject a geogrid"""
-    dvals, xvals, yvals = simple_GeoGrid_values()
+    dvals, xvals, yvals, wkt = simple_GeoGrid_values()
     gg = georef.GeoGrid(dvals, xvals, yvals, 3411)
 
     out_xdim = 100
     out_ydim = 100
-    out_geotransform = (-165., 0.1, 0.0, 65.0, 0.0, -0.1)
+    out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
+    out_geotransform = (65., -0.05, 0.0, -163.0, 0.0, 0.05)
+    # to -158  60
+    # 100 in 5 deg is .05 per
 
     gg_reproj = georef.geogrid.reproject_GeoGrid(
         gg, 4326, out_xdim, out_ydim, out_geotransform)
+    gg_reproj.saveAsGeotiff('test_gg_reproj.tif')
 
 
 def test_saveasGeotiff():
     """Test that we can save a GeoGrid as a geotiff"""
+    overwrite=True
     test_fn = 'test_geotiff.tif'
-    if not os.path.isfile(test_fn):
-        dvals, xvals, yvals = simple_GeoGrid_values()
-        gg = georef.GeoGrid(dvals, xvals, yvals, 3411)
+    if overwrite or not os.path.isfile(test_fn):
+        dvals, xvals, yvals, wkt = simple_GeoGrid_values()
+        gg = georef.GeoGrid(dvals, xvals, yvals, wkt)
         gg.saveAsGeotiff(test_fn)
+    else:
+        print('Skipping saveAsGeotiff test because testfile already exists')
+
+
+def test_convert_grid_corners():
+    """Test can convert grid corners to GeoPoints"""
+    dvals, xvals, yvals, wkt = simple_GeoGrid_values()
+    gg = georef.GeoGrid(dvals, xvals, yvals, wkt)
+    i0=1
+    j0=1
+    print('x[{}]: {}'.format(i0, gg.x[i0]))
+    print('y[{}]: {}'.format(j0, gg.y[j0]))
+    print('d[{}, {}]: {}'.format(i0, j0, gg.data_array[j0, i0]))
+    gp = georef.GeoPoint(gg.srs, gg.x[i0], gg.y[j0], gg.data_array[j0, i0])
