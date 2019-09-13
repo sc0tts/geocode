@@ -12,6 +12,7 @@ import numpy as np
 import netCDF4
 import datetime
 import osr
+import gdal
 
 
 epsg_3411_as_wkt = """
@@ -54,22 +55,18 @@ default_georef_testnc_varname_3 = 'sea_ice_concentration'
 
 def simple_GeoGrid_values():
     """Returns a simple set of values that can initialize a GeoGrid"""
-    xdim = 3
-    ydim = 4
+    xdim = 5
+    ydim = 6
 
-    #x0 = -160
-    #dx = 1
+    x0 = -163
+    dx = 1
 
-    #y0 = 63
-    #dy = -1
+    y0 = 64
+    dy = -0.5
 
-    x0 = 63
-    dx = -1
+    geotransform = (x0, dx, 0., y0, 0., dy)
 
-    y0 = -160
-    dy = 1
-
-    data_values = np.arange(12.).reshape((ydim, xdim))
+    data_values = np.arange(xdim * ydim).reshape((ydim, xdim))
     x_values = np.linspace(
         x0 + 0.5 * dx,
         x0 + (xdim - 0.5) * dx,
@@ -83,7 +80,30 @@ def simple_GeoGrid_values():
     srs.ImportFromEPSG(4326)
     wkt = srs.ExportToWkt()
 
+    # Note: GDAL doesn't have an Int32 type...
+    if data_values.dtype == np.int64:
+        data_values = data_values.astype(np.int32)
+
+    """
+    # use local create_geotiff() function
+    test_fn = 'intest.tif'
+    create_geotiff(test_fn,
+        x_values, y_values, data_values, wkt, geotransform)
+    raise SystemExit('Stopping after creating geotiff')
+    """
+
+
     return data_values, x_values, y_values, wkt
+
+
+def create_geotiff(out_fn, x_values, y_values, data_values, wkt, geotransform):
+    """Quick create_geotiff"""
+    ds = gdal.GetDriverByName('GTiff').Create(
+        out_fn, len(x_values), len(y_values), 1, 1)
+    ds.SetGeoTransform(geotransform)
+    ds.SetProjection(wkt)
+    ds.GetRasterBand(1).WriteArray(data_values)
+    ds.FlushCache()
 
 
 def test_can_declare_GeoGrid():
@@ -231,23 +251,63 @@ def test_bad_projdef_yields_Warningo():
     raise ValueError('Warning not raised for bad proj description')
 
 
-def test_reproject_geogrid():
-    """Test that we can reproject a geogrid"""
+def test_warp_geogrid():
+    """Test that we can warp a geogrid"""
     dvals, xvals, yvals, wkt = simple_GeoGrid_values()
-    gg = georef.GeoGrid(dvals, xvals, yvals, 3411)
+    gg = georef.GeoGrid(dvals, xvals, yvals, wkt)
 
+    print('in_geotransform:\n  {}'.format(gg.geotransform))
+    gg.saveAsGeotiff('test_gg_preproj.tif')
+
+    print('gg.x:\n  {}'.format(gg.x))
+    print('gg.y:\n  {}'.format(gg.y))
+    print('gg.data:\n  {}'.format(gg.data_array))
+    print('gg.geotransform:  {}'.format(gg.geotransform))
+    print('gg.xdim:  {}'.format(gg.xdim))
+    print('gg.ydim:  {}'.format(gg.ydim))
+    print('right edge x: {}'.format(
+        gg.x[0] + (gg.xdim - 0.5) * gg.geotransform[1]))
+    print('bottom edge y: {}'.format(
+        gg.y[0] + (gg.ydim - 0.5) * gg.geotransform[5]))
+
+    # Reprojection parameters
     out_xdim = 100
     out_ydim = 100
     out_geotransform = (-163., 0.05, 0.0, 65.0, 0.0, -0.05)
-    out_geotransform = (65., -0.05, 0.0, -163.0, 0.0, 0.05)
+    out_epsg = 4326
+    #out_geotransform = (63., -0.05, 0.0, 60.0, 0.0, 0.05)
     # to -158  60
     # 100 in 5 deg is .05 per
 
-    gg_reproj = georef.geogrid.reproject_GeoGrid(
-        gg, 4326, out_xdim, out_ydim, out_geotransform)
+    gg_reproj = georef.geogrid.warp_GeoGrid(
+        gg, out_epsg, out_xdim, out_ydim, out_geotransform)
+
+    gg2 = gg_reproj
+    print('gg2.x:\n  {}'.format(gg2.x))
+    print('gg2.y:\n  {}'.format(gg2.y))
+    print('gg2.data:\n  {}'.format(gg2.data_array))
+    print('gg2.min:\n  {}'.format(gg2.data_array.min()))
+    print('gg2.max:\n  {}'.format(gg2.data_array.max()))
+    print('gg2.geotransform:  {}'.format(gg2.geotransform))
+    print('gg2.xdim:  {}'.format(gg2.xdim))
+    print('gg2.ydim:  {}'.format(gg2.ydim))
+    print('right edge x: {}'.format(
+        gg2.x[0] + (gg2.xdim - 0.5) * gg2.geotransform[1]))
+    print('bottom edge y: {}'.format(
+        gg2.y[0] + (gg2.ydim - 0.5) * gg2.geotransform[5]))
     gg_reproj.saveAsGeotiff('test_gg_reproj.tif')
 
+    """
+    print('out_xdim: {}'.format(out_xdim))
+    print('out_ydim: {}'.format(out_ydim))
+    print('gg_reproj xdim: {}'.format(len(gg_reproj.x)))
+    print('gg_reproj ydim: {}'.format(len(gg_reproj.y)))
 
+    print('reprojed array:\n  {}'.format(gg_reproj.data_array))
+    """
+
+
+'''
 def test_saveasGeotiff():
     """Test that we can save a GeoGrid as a geotiff"""
     overwrite=True
@@ -270,3 +330,5 @@ def test_convert_grid_corners():
     print('y[{}]: {}'.format(j0, gg.y[j0]))
     print('d[{}, {}]: {}'.format(i0, j0, gg.data_array[j0, i0]))
     gp = georef.GeoPoint(gg.srs, gg.x[i0], gg.y[j0], gg.data_array[j0, i0])
+
+'''
